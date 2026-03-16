@@ -9,7 +9,7 @@
     "dist": "npm run dist:prod",
     "start": "npm run dist && cd dist && npm start",
     "dev": "npm run dist:dev && cd dist && npm start",
-    "script:dist:start": "node ./index.js",
+    "script:dist:start": "node --env-file=.env ./index.js",
     "lint": "eslint src/ --ext .ts",
     "format": "eslint src/ --fix --ext .ts",
     "test": "echo \"Error: no test specified\" && exit 1"

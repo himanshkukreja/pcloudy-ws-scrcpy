@@ -3,6 +3,8 @@ import WS from 'ws';
 import { Service } from './Service';
 import { HttpServer, ServerAndPort } from './HttpServer';
 import { MwFactory } from '../mw/Mw';
+import { EnvName } from '../EnvName';
+import * as process from 'process';
 
 export class WebSocketServer implements Service {
     private static instance?: WebSocketServer;
@@ -31,6 +33,8 @@ export class WebSocketServer implements Service {
     public attachToServer(item: ServerAndPort): WSServer {
         const { server, port } = item;
         const TAG = `WebSocket Server {tcp:${port}}`;
+        const rboxServicePort = process.env[EnvName.RBOX_SERVICE_PORT] || '4000';
+        const internalSecret = process.env[EnvName.INTERNAL_API_SECRET] || '';
         const wss = new WSServer({ server });
         wss.on('connection', async (ws: WS, request) => {
             if (!request.url) {
@@ -38,6 +42,31 @@ export class WebSocketServer implements Service {
                 return;
             }
             const url = new URL(request.url, 'https://example.org/');
+
+            // Validate stream session token if present in connection URL
+            const token = url.searchParams.get('token');
+            const udid = url.searchParams.get('udid');
+            if (token && udid) {
+                let tokenValid = false;
+                try {
+                    const validateUrl = `http://127.0.0.1:${rboxServicePort}/api/v1/stream/validate?token=${encodeURIComponent(token)}&udid=${encodeURIComponent(udid)}`;
+                    const validateRes = await fetch(validateUrl, {
+                        headers: { 'x-internal-token': internalSecret },
+                        signal: AbortSignal.timeout(3000),
+                    });
+                    if (validateRes.ok) {
+                        const body = await validateRes.json() as { valid: boolean };
+                        tokenValid = body.valid;
+                    }
+                } catch (e) {
+                    console.error(`[${TAG}] Token validation call failed:`, (e as Error).message);
+                }
+                if (!tokenValid) {
+                    ws.close(4003, `[${TAG}] Invalid or expired stream token`);
+                    return;
+                }
+            }
+
             const action = url.searchParams.get('action') || '';
             let processed = false;
             for (const mwFactory of this.mwFactories.values()) {

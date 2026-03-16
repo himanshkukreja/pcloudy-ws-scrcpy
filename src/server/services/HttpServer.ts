@@ -141,15 +141,36 @@ export class HttpServer extends TypedEmitter<HttpServerEvents> implements Servic
         });
 
         // Protect the base path
-        this.mainApp.use((req: Request, res: Response, next: NextFunction) => {
-            if (req.path === '/' && req.query.hasHash==='true') {
-                // Signature check bypassed — allow all hasHash requests through
-                next();
-            } else if (req.path === '/') {
-                // Apply authentication for all other cases (including the base URL)
-                authMiddleware(req, res, next);
+        const rboxServicePort = process.env[EnvName.RBOX_SERVICE_PORT] || '4000';
+        const internalSecret = process.env[EnvName.INTERNAL_API_SECRET] || '';
+        this.mainApp.use(async (req: Request, res: Response, next: NextFunction) => {
+            if (req.path === '/') {
+                const token = req.query.token as string | undefined;
+                const udid = req.query.udid as string | undefined;
+                if (token && udid) {
+                    // Validate stream session token against rbox token registry
+                    try {
+                        const validateUrl = `http://127.0.0.1:${rboxServicePort}/api/v1/stream/validate?token=${encodeURIComponent(token)}&udid=${encodeURIComponent(udid)}`;
+                        const validateRes = await fetch(validateUrl, {
+                            headers: { 'x-internal-token': internalSecret },
+                            signal: AbortSignal.timeout(3000),
+                        });
+                        if (validateRes.ok) {
+                            const body = await validateRes.json() as { valid: boolean };
+                            if (body.valid) {
+                                return next();
+                            }
+                        }
+                    } catch (e) {
+                        console.error('[HttpServer] Token validation call failed:', (e as Error).message);
+                    }
+                    return res.status(403).send('Invalid or expired stream token');
+                } else {
+                    // No token — apply basic auth for direct/admin access
+                    authMiddleware(req, res, next);
+                }
             } else {
-                // Allow access to other paths
+                // Allow access to other paths (static assets, etc.)
                 next();
             }
         });

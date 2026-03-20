@@ -5,7 +5,6 @@ import Size from '../Size';
 import Util from '../Util';
 import { TypedEmitter } from '../../common/TypedEmitter';
 import { DisplayInfo } from '../DisplayInfo';
-import genericAndroid from '../../common/generic_android.png';
 
 interface BitrateStat {
     timestamp: number;
@@ -194,6 +193,9 @@ export abstract class BasePlayer extends TypedEmitter<PlayerEvents> {
         const params = new URLSearchParams(window.location.search);
         const deviceType = params.get('deviceType') || 'emulated';
         const isAndroidTV = deviceType === 'androidtv';
+
+        // True once the actual video stream has started (not just connecting/loading state)
+        const isStreaming = !!this.screenInfo?.videoSize;
 
         // Get video dimensions from screenInfo (actual video stream size) or displayInfo as fallback
         let deviceWidth: number;
@@ -447,80 +449,230 @@ export abstract class BasePlayer extends TypedEmitter<PlayerEvents> {
                 }
             }
         } else {
-            // --- Android phone frame (PNG-based) ---
+            // --- Android phone frame (CSS-based, modern design with USB-C cable) ---
             // Remove TV frame if it exists from a previous render
             const staleTvFrame = document.getElementById('generic-tv-mockup');
             if (staleTvFrame) staleTvFrame.remove();
+            // Remove old PNG frame if it exists
+            const staleImgFrame = document.getElementById('generic-android-mockup');
+            if (staleImgFrame) staleImgFrame.remove();
 
-            // Restore phone screen border-radius
-            videoElem.style.borderRadius = '1.5rem';
-            touchElem.style.borderRadius = '1.5rem';
+            const existingPhoneFrame = document.getElementById('generic-phone-mockup') as HTMLElement;
 
-            let androidFrame = document.getElementById('generic-android-mockup') as HTMLImageElement;
-            if (!androidFrame && phoneContainer) {
-                androidFrame = document.createElement('img');
-                androidFrame.src = genericAndroid;
-                androidFrame.id = 'generic-android-mockup';
-                androidFrame.style.position = 'absolute';
-                androidFrame.style.pointerEvents = 'none';
-                androidFrame.style.zIndex = '0'; // Behind video/touch layers
-                phoneContainer.appendChild(androidFrame);
-            }
+            if (!isStreaming) {
+                // Loading/connecting state: hide the phone frame so the loading overlay
+                // doesn't show bezel borders poking out around it (double-frame effect).
+                if (existingPhoneFrame) existingPhoneFrame.style.display = 'none';
+                videoElem.style.borderRadius = '1.5rem';
+                touchElem.style.borderRadius = '1.5rem';
+            } else {
+                // Streaming state: show/build the phone frame.
+                if (existingPhoneFrame) existingPhoneFrame.style.display = '';
 
-            if (androidFrame) {
-                let frameWidth: number;
-                let frameHeight: number;
-                let frameOffsetX: number;
-                let frameOffsetY: number;
+                // Bezel sizes computed from short/long sides so proportions are correct
+                // in both portrait and landscape without needing CSS rotation.
+                const shortSide = rotation ? scaledHeight : scaledWidth;
+                const longSide  = rotation ? scaledWidth  : scaledHeight;
 
-                if (rotation) {
-                    // Device is in landscape mode - frame needs to be created in portrait then rotated
-                    // The frame PNG has thicker bezels on top/bottom (designed for portrait)
-                    // When rotated 90°, those thick bezels become left/right sides
-                    // So we need to swap multipliers:
-                    // - frameWidth (becomes visual height) should use width multiplier (thicker bezel = 1.08)
-                    // - frameHeight (becomes visual width) should use height multiplier (thinner bezel = 1.04)
-                    frameWidth = scaledHeight * frameWidthMultiplier; // This becomes visual height (thick bezels on top/bottom)
-                    frameHeight = scaledWidth * frameHeightMultiplier; // This becomes visual width (thin bezels on sides)
+                const phoneSide   = Math.round(shortSide * 0.030);
+                const phoneTop    = Math.round(longSide  * 0.022);
+                const phoneChin   = Math.round(longSide  * 0.022);
+                const phoneCorner = Math.round(shortSide * 0.085);
 
-                    androidFrame.style.width = `${frameWidth}px`;
-                    androidFrame.style.height = `${frameHeight}px`;
-                    androidFrame.style.maxWidth = 'none';
+                const phoneBodyW = shortSide + phoneSide * 2;
+                const phoneBodyH = longSide  + phoneTop  + phoneChin;
 
-                    // Rotate frame 90° to match landscape video
-                    androidFrame.style.transform = 'rotateZ(-90deg)';
-                    // Transform origin needs to account for the rotation pivot
-                    androidFrame.style.transformOrigin = `${frameWidth / 2}px ${frameWidth / 2}px`;
+                // In landscape the long side runs horizontally, so swap the CSS width/height.
+                const phoneFrameW = rotation ? phoneBodyH : phoneBodyW;
+                const phoneFrameH = rotation ? phoneBodyW : phoneBodyH;
 
-                    // After rotation: visual width = frameHeight, visual height = frameWidth
-                    const visualFrameWidth = frameHeight;
-                    const visualFrameHeight = frameWidth;
-                    frameOffsetX = (visualFrameWidth - scaledWidth) / 2;
-                    frameOffsetY = (visualFrameHeight - scaledHeight) / 2;
-                } else {
-                    // Portrait mode - straightforward
-                    frameWidth = scaledWidth * frameWidthMultiplier;
-                    frameHeight = scaledHeight * frameHeightMultiplier;
+                const screenCorner = Math.max(6, phoneCorner - phoneSide);
+                videoElem.style.borderRadius = `${screenCorner}px`;
+                touchElem.style.borderRadius = `${screenCorner}px`;
 
-                    androidFrame.style.width = `${frameWidth}px`;
-                    androidFrame.style.height = `${frameHeight}px`;
-                    androidFrame.style.maxWidth = 'none';
-                    androidFrame.style.transform = '';
-                    androidFrame.style.transformOrigin = 'center center';
+                // Cable: connector + straight drop + rounded tip. Portrait only.
+                const showCable  = !rotation;
+                const cableW     = Math.round(shortSide * 0.028);
+                const connectorH = Math.round(longSide  * 0.018);
+                const connectorW = Math.round(cableW * 1.7);
+                const cableBodyH = Math.round(longSide  * 0.085); // includes the "hang" length
+                const totalExtraH = showCable ? (connectorH + cableBodyH) : 0;
 
-                    frameOffsetX = (frameWidth - scaledWidth) / 2;
-                    frameOffsetY = (frameHeight - scaledHeight) / 2;
+                if (this.phoneContainer) {
+                    this.phoneContainer.style.height = `${scaledHeight + totalExtraH}px`;
                 }
 
-                androidFrame.style.left = `${-frameOffsetX}px`;
-                androidFrame.style.top = `${-frameOffsetY}px`;
-                androidFrame.style.display = 'block';
+                let phoneFrame = document.getElementById('generic-phone-mockup') as HTMLElement;
+                if (!phoneFrame && phoneContainer) {
+                    phoneFrame = document.createElement('div');
+                    phoneFrame.id = 'generic-phone-mockup';
+                    phoneFrame.style.position = 'absolute';
+                    phoneFrame.style.pointerEvents = 'none';
+                    phoneFrame.style.zIndex = '0';
+                    phoneFrame.innerHTML = `
+                        <div id="phone-body"></div>
+                        <div id="phone-btn-vol-up"></div>
+                        <div id="phone-btn-vol-down"></div>
+                        <div id="phone-btn-power"></div>
+                        <div id="phone-usbc-connector"></div>
+                        <div id="phone-cable-straight"></div>
+                        <div id="phone-cable-hang"></div>
+                    `;
+                    phoneContainer.appendChild(phoneFrame);
+                }
 
-                videoElem.style.marginTop = '0';
-                videoElem.style.marginLeft = '0';
-                touchElem.style.marginTop = '0';
-                touchElem.style.marginLeft = '0';
+                if (phoneFrame) {
+                    phoneFrame.style.transform = '';
+                    phoneFrame.style.transformOrigin = 'center center';
+                    phoneFrame.style.width  = `${phoneFrameW}px`;
+                    phoneFrame.style.height = `${phoneFrameH + totalExtraH}px`;
+
+                    // Offset so the video sits exactly inside the bezel.
+                    // Landscape: long side is horizontal, so "top" bezel is now the left edge.
+                    const frameOffsetX = rotation ? phoneTop  : phoneSide;
+                    const frameOffsetY = rotation ? phoneSide : phoneTop;
+                    phoneFrame.style.left = `${-frameOffsetX}px`;
+                    phoneFrame.style.top  = `${-frameOffsetY}px`;
+
+                    // Phone body shell
+                    const body = document.getElementById('phone-body') as HTMLElement;
+                    if (body) {
+                        body.style.position = 'absolute';
+                        body.style.top = '0';
+                        body.style.left = '0';
+                        body.style.width  = `${phoneFrameW}px`;
+                        body.style.height = `${phoneFrameH}px`;
+                        body.style.background = 'linear-gradient(160deg, #2e2e2e 0%, #1a1a1a 55%, #111 100%)';
+                        body.style.borderRadius = `${phoneCorner}px`;
+                        body.style.boxShadow = [
+                            '4px 0 18px rgba(0,0,0,0.55)',
+                            '-1px 0 6px rgba(0,0,0,0.35)',
+                            'inset 0 1px 0 rgba(255,255,255,0.08)',
+                            'inset 1px 0 0 rgba(255,255,255,0.04)',
+                        ].join(', ');
+                        body.style.boxSizing = 'border-box';
+                    }
+
+                    const volUp   = document.getElementById('phone-btn-vol-up')   as HTMLElement;
+                    const volDown = document.getElementById('phone-btn-vol-down') as HTMLElement;
+                    const power   = document.getElementById('phone-btn-power')    as HTMLElement;
+
+                    if (rotation) {
+                        // Landscape: vol buttons protrude from top edge, power from bottom edge
+                        const btnH = Math.round(phoneSide * 0.55);
+                        const btnW = Math.round(shortSide * 0.065);
+                        if (volUp) {
+                            volUp.style.position = 'absolute';
+                            volUp.style.top  = `${-btnH}px`;
+                            volUp.style.left = `${Math.round(phoneFrameW * 0.62)}px`;
+                            volUp.style.width  = `${btnW}px`;
+                            volUp.style.height = `${btnH}px`;
+                            volUp.style.background = 'linear-gradient(to bottom, #1a1a1a, #2a2a2a)';
+                            volUp.style.borderRadius = `${btnH}px ${btnH}px 0 0`;
+                            volUp.style.boxShadow = 'inset 0 1px 0 rgba(255,255,255,0.06)';
+                        }
+                        if (volDown) {
+                            volDown.style.position = 'absolute';
+                            volDown.style.top  = `${-btnH}px`;
+                            volDown.style.left = `${Math.round(phoneFrameW * 0.71)}px`;
+                            volDown.style.width  = `${btnW}px`;
+                            volDown.style.height = `${btnH}px`;
+                            volDown.style.background = 'linear-gradient(to bottom, #1a1a1a, #2a2a2a)';
+                            volDown.style.borderRadius = `${btnH}px ${btnH}px 0 0`;
+                            volDown.style.boxShadow = 'inset 0 1px 0 rgba(255,255,255,0.06)';
+                        }
+                        if (power) {
+                            power.style.position = 'absolute';
+                            power.style.top  = `${phoneFrameH}px`;
+                            power.style.left = `${Math.round(phoneFrameW * 0.25)}px`;
+                            power.style.width  = `${Math.round(shortSide * 0.08)}px`;
+                            power.style.height = `${btnH}px`;
+                            power.style.background = 'linear-gradient(to top, #1a1a1a, #2a2a2a)';
+                            power.style.borderRadius = `0 0 ${btnH}px ${btnH}px`;
+                            power.style.boxShadow = 'inset 0 -1px 0 rgba(255,255,255,0.06)';
+                        }
+                    } else {
+                        // Portrait: vol buttons protrude from left edge, power from right edge
+                        const btnW = Math.round(phoneSide * 0.55);
+                        if (volUp) {
+                            const btnH   = Math.round(scaledHeight * 0.065);
+                            const btnTop = Math.round(phoneTop + scaledHeight * 0.18);
+                            volUp.style.position = 'absolute';
+                            volUp.style.left = `${-btnW}px`;
+                            volUp.style.top  = `${btnTop}px`;
+                            volUp.style.width  = `${btnW}px`;
+                            volUp.style.height = `${btnH}px`;
+                            volUp.style.background = 'linear-gradient(to right, #1a1a1a, #2a2a2a)';
+                            volUp.style.borderRadius = `${btnW}px 0 0 ${btnW}px`;
+                            volUp.style.boxShadow = 'inset 0 1px 0 rgba(255,255,255,0.06)';
+                        }
+                        if (volDown) {
+                            const btnH   = Math.round(scaledHeight * 0.065);
+                            const btnTop = Math.round(phoneTop + scaledHeight * 0.27);
+                            volDown.style.position = 'absolute';
+                            volDown.style.left = `${-btnW}px`;
+                            volDown.style.top  = `${btnTop}px`;
+                            volDown.style.width  = `${btnW}px`;
+                            volDown.style.height = `${btnH}px`;
+                            volDown.style.background = 'linear-gradient(to right, #1a1a1a, #2a2a2a)';
+                            volDown.style.borderRadius = `${btnW}px 0 0 ${btnW}px`;
+                            volDown.style.boxShadow = 'inset 0 1px 0 rgba(255,255,255,0.06)';
+                        }
+                        if (power) {
+                            const btnH   = Math.round(scaledHeight * 0.08);
+                            const btnTop = Math.round(phoneTop + scaledHeight * 0.22);
+                            power.style.position = 'absolute';
+                            power.style.left = `${phoneFrameW}px`;
+                            power.style.top  = `${btnTop}px`;
+                            power.style.width  = `${btnW}px`;
+                            power.style.height = `${btnH}px`;
+                            power.style.background = 'linear-gradient(to left, #1a1a1a, #2a2a2a)';
+                            power.style.borderRadius = `0 ${btnW}px ${btnW}px 0`;
+                            power.style.boxShadow = 'inset 0 1px 0 rgba(255,255,255,0.06)';
+                        }
+                    }
+
+                    // Cable: USB-C connector + straight drop with rounded tip. Portrait only.
+                    const connector = document.getElementById('phone-usbc-connector') as HTMLElement;
+                    const straight  = document.getElementById('phone-cable-straight') as HTMLElement;
+                    const hang      = document.getElementById('phone-cable-hang')     as HTMLElement;
+
+                    if (hang) hang.style.display = 'none'; // no separate hang element
+
+                    if (showCable) {
+                        if (connector) {
+                            connector.style.display = '';
+                            connector.style.position = 'absolute';
+                            connector.style.top  = `${phoneFrameH}px`;
+                            connector.style.left = `${(phoneFrameW - connectorW) / 2}px`;
+                            connector.style.width  = `${connectorW}px`;
+                            connector.style.height = `${connectorH}px`;
+                            connector.style.background = 'linear-gradient(to bottom, #555 0%, #333 100%)';
+                            connector.style.borderRadius = `0 0 ${Math.round(connectorW * 0.25)}px ${Math.round(connectorW * 0.25)}px`;
+                            connector.style.boxShadow = '0 1px 3px rgba(0,0,0,0.6)';
+                        }
+                        if (straight) {
+                            const tipR = Math.round(cableW / 2);
+                            straight.style.display = '';
+                            straight.style.position = 'absolute';
+                            straight.style.top  = `${phoneFrameH + connectorH}px`;
+                            straight.style.left = `${(phoneFrameW - cableW) / 2}px`;
+                            straight.style.width  = `${cableW}px`;
+                            straight.style.height = `${cableBodyH}px`;
+                            straight.style.background = 'linear-gradient(to right, #3a3a3a 0%, #555 40%, #3a3a3a 100%)';
+                            straight.style.borderRadius = `0 0 ${tipR}px ${tipR}px`;
+                        }
+                    } else {
+                        if (connector) connector.style.display = 'none';
+                        if (straight)  straight.style.display  = 'none';
+                    }
+                }
             }
+
+            videoElem.style.marginTop  = '0';
+            videoElem.style.marginLeft = '0';
+            touchElem.style.marginTop  = '0';
+            touchElem.style.marginLeft = '0';
         }
 
         // Set wrapper dimensions based on VISIBLE size (after UI rotation)
@@ -536,11 +688,10 @@ export abstract class BasePlayer extends TypedEmitter<PlayerEvents> {
             wrapperWidth = scaledVisibleWidth * frameWidthMultiplier;
             wrapperHeight = scaledVisibleHeight * frameHeightMultiplier;
         } else if (rotation) {
-            // Phone in landscape (auto-rotate): frame is rotated, so its visual dimensions are swapped
-            // frameWidth = scaledHeight * 1.08 becomes visual height
-            // frameHeight = scaledWidth * 1.04 becomes visual width
-            wrapperWidth = scaledVisibleWidth * frameHeightMultiplier;
-            wrapperHeight = scaledVisibleHeight * frameWidthMultiplier;
+            // Phone in landscape: frame is drawn natively in landscape (no CSS rotation).
+            // The side bezels add a small amount to both width and height — use normal multipliers.
+            wrapperWidth = scaledVisibleWidth * frameWidthMultiplier;
+            wrapperHeight = scaledVisibleHeight * frameHeightMultiplier;
         } else if (isUIRotated) {
             // Manual rotation: phone container is rotated, frame stays portrait
             // Visual dimensions after container rotation swap
@@ -578,9 +729,11 @@ export abstract class BasePlayer extends TypedEmitter<PlayerEvents> {
         deviceView.style.alignItems = 'center';
         deviceView.style.overflow = 'auto'; // Allow scrolling when zoomed phone exceeds viewport
 
-        // Center the phone - toolbar is at bottom on mobile, left on desktop
+        // Center the phone in the space to the right of the toolbar.
+        // On desktop/tablet the toolbar is a flex sibling on the left — offset padding so
+        // justifyContent:center centres the phone in the remaining space, not the full width.
         deviceView.style.justifyContent = 'center';
-        deviceView.style.paddingLeft = '0';
+        deviceView.style.paddingLeft  = isMobile ? '0' : `${controlPanelWidth}px`;
         deviceView.style.paddingRight = '0';
 
         if (isMobile) {

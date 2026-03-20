@@ -46,6 +46,7 @@ export enum Icon {
     SCREEN_ROTATION,
     VOLUME_ON,
     VOLUME_OFF,
+    TV_REMOTE,
 }
 
 export default class SvgImage {
@@ -98,6 +99,11 @@ export default class SvgImage {
                 return VolumeOnSVG;
             case Icon.VOLUME_OFF:
                 return VolumeOffSVG;
+            case Icon.TV_REMOTE:
+                // Inline TV remote icon (Material Design "tv" style remote)
+                return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
+                    <path d="M7 3C5.9 3 5 3.9 5 5v14c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2H7zm5 2c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm-4 7h2v2H8v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2z"/>
+                </svg>`;
             default:
                 return '';
         }

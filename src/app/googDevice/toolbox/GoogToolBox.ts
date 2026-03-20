@@ -7,6 +7,7 @@ import { ToolBoxElement } from '../../toolbox/ToolBoxElement';
 import { ToolBoxCheckbox } from '../../toolbox/ToolBoxCheckbox';
 import { StreamClientScrcpy } from '../client/StreamClientScrcpy';
 import { BasePlayer } from '../../player/BasePlayer';
+import { TVRemote } from './TVRemote';
 
 const BUTTONS = [
     {
@@ -137,6 +138,19 @@ export class GoogToolBox extends ToolBox {
             });
             // elements.unshift(more);
         }
+
+        // Android TV: add a remote control toggle button
+        const params = new URLSearchParams(window.location.search);
+        const isAndroidTV = params.get('deviceType') === 'androidtv';
+        if (isAndroidTV) {
+            const tvRemote = new TVRemote(client);
+            const remoteBtn = new ToolBoxButton('TV Remote', SvgImage.Icon.TV_REMOTE);
+            remoteBtn.addEventListener('click', () => {
+                tvRemote.toggle();
+            });
+            elements.unshift(remoteBtn); // Put at top of toolbar
+        }
+
         return new GoogToolBox(elements);
     }
 }

@@ -461,6 +461,42 @@ body.stream {
     margin-top: 0.25rem;
 }
 
+/* ==================== BOTTOM TOOLBAR (TV / landscape phone on desktop) ==================== */
+
+/* Applied via JS when isAndroidTV || rotation — mirrors the mobile bottom bar style */
+.control-buttons-list.bottom-toolbar {
+    width: auto;
+    height: auto;
+    padding: 0.2rem 0.4rem;
+    left: 50%;
+    right: auto;
+    top: auto;
+    bottom: 0;
+    transform: translateX(-50%);
+    flex-direction: row;
+    cursor: move; /* Still draggable on desktop */
+    border-radius: 1rem 1rem 0 0;
+    gap: 0.15rem;
+}
+
+.control-buttons-list.bottom-toolbar .toolbox-content {
+    flex-direction: row;
+    max-height: none;
+    gap: 0.15rem;
+}
+
+/* Hide drag handle (vertical) for bottom toolbar */
+.control-buttons-list.bottom-toolbar::before {
+    display: none;
+}
+
+/* Collapsed state for bottom toolbar */
+.control-buttons-list.bottom-toolbar.collapsed .toolbox-content {
+    max-width: 0;
+    max-height: none;
+    opacity: 0;
+}
+
 /* ==================== RESPONSIVE MOBILE STYLES ==================== */
 
 /* Mobile devices (width < 600px) */

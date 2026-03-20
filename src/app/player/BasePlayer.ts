@@ -239,15 +239,26 @@ export abstract class BasePlayer extends TypedEmitter<PlayerEvents> {
         const controlPanel = document.getElementsByClassName('control-buttons-list')[0] as HTMLElement;
         // On mobile, toolbar is at bottom - reserve vertical space for it (thin bar)
         const mobileToolbarHeight = window.innerWidth < 400 ? 28 : 32;
-        // On desktop/tablet, toolbar is on left side
-        const controlPanelWidth = isMobile ? 0 : Math.max(controlPanel?.offsetWidth || 0, 50) + 24;
+        // For TV or landscape phone: move toolbar to bottom to free up horizontal space
+        const useBottomToolbar = !isMobile && (isAndroidTV || rotation);
+        // On desktop/tablet, toolbar is on left side (unless TV/landscape — then it goes to bottom)
+        const controlPanelWidth = (isMobile || useBottomToolbar) ? 0 : Math.max(controlPanel?.offsetWidth || 0, 50) + 24;
+
+        // Apply bottom-toolbar class to move control panel to bottom for TV/landscape
+        if (controlPanel) {
+            if (useBottomToolbar) {
+                controlPanel.classList.add('bottom-toolbar');
+            } else {
+                controlPanel.classList.remove('bottom-toolbar');
+            }
+        }
 
         // Responsive padding - much less on mobile to maximize phone size
         let horizontalPadding: number;
         let verticalPadding: number;
 
-        if (isMobile) {
-            horizontalPadding = 4; // Minimal horizontal padding on mobile
+        if (isMobile || useBottomToolbar) {
+            horizontalPadding = isMobile ? 4 : (isLandscapeVisible ? 80 : 48); // Keep desktop horizontal padding for TV/landscape
             verticalPadding = mobileToolbarHeight + 28; // Space for bottom toolbar + clearance
         } else if (isTablet) {
             horizontalPadding = isLandscapeVisible ? 40 : 24;
@@ -681,11 +692,11 @@ export abstract class BasePlayer extends TypedEmitter<PlayerEvents> {
         // On desktop/tablet the toolbar is a flex sibling on the left — offset padding so
         // justifyContent:center centres the phone in the remaining space, not the full width.
         deviceView.style.justifyContent = 'center';
-        deviceView.style.paddingLeft  = isMobile ? '0' : `${controlPanelWidth}px`;
+        deviceView.style.paddingLeft  = (isMobile || useBottomToolbar) ? '0' : `${controlPanelWidth}px`;
         deviceView.style.paddingRight = '0';
 
-        if (isMobile) {
-            // Mobile: add bottom padding for toolbar + clearance so phone doesn't overlap
+        if (isMobile || useBottomToolbar) {
+            // Mobile/TV/landscape: add bottom padding for toolbar + clearance so phone doesn't overlap
             deviceView.style.paddingBottom = `${mobileToolbarHeight + 20}px`;
         } else {
             deviceView.style.paddingBottom = '0';

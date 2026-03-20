@@ -339,6 +339,8 @@ export abstract class BasePlayer extends TypedEmitter<PlayerEvents> {
             this.phoneContainer.style.width = widthPx;
             this.phoneContainer.style.height = heightPx;
             this.phoneContainer.style.position = 'relative';
+            // Allow the frame to visually overflow the container (bezels extend beyond video bounds)
+            this.phoneContainer.style.overflow = 'visible';
             // Reset any positioning that might affect centering
             this.phoneContainer.style.margin = '0';
             this.phoneContainer.style.left = '';

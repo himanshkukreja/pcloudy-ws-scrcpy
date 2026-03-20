@@ -193,6 +193,7 @@ export abstract class BasePlayer extends TypedEmitter<PlayerEvents> {
 
         const params = new URLSearchParams(window.location.search);
         const deviceType = params.get('deviceType') || 'emulated';
+        const isAndroidTV = deviceType === 'androidtv';
 
         // Get video dimensions from screenInfo (actual video stream size) or displayInfo as fallback
         let deviceWidth: number;
@@ -206,8 +207,10 @@ export abstract class BasePlayer extends TypedEmitter<PlayerEvents> {
             deviceWidth = this.displayInfo.size.width;
             deviceHeight = this.displayInfo.size.height;
         } else {
-            deviceWidth = 1080;
-            deviceHeight = 1920;
+            // Default dimensions when no stream info yet (connecting state)
+            // TV defaults to landscape 1920×1080; phones default to portrait 1080×1920
+            deviceWidth = isAndroidTV ? 1920 : 1080;
+            deviceHeight = isAndroidTV ? 1080 : 1920;
         }
 
         // Determine if device video is in landscape (width > height)
@@ -229,8 +232,9 @@ export abstract class BasePlayer extends TypedEmitter<PlayerEvents> {
 
         // Frame multipliers - defined early so we can account for them in available space
         // The frame adds extra width/height around the phone content
-        const frameWidthMultiplier = 1.08;
-        const frameHeightMultiplier = 1.04;
+        // TV: ultra-thin bezel (1.5% each side) + slim stand below
+        const frameWidthMultiplier = isAndroidTV ? 1.03 : 1.08;
+        const frameHeightMultiplier = isAndroidTV ? 1.10 : 1.04;
 
         // Calculate available space (accounting for control panel)
         const controlPanel = document.getElementsByClassName('control-buttons-list')[0] as HTMLElement;
@@ -324,14 +328,12 @@ export abstract class BasePlayer extends TypedEmitter<PlayerEvents> {
         videoElem.style.maxWidth = 'none';
         videoElem.style.marginTop = '0';
         videoElem.style.marginLeft = '0';
-        videoElem.style.borderRadius = '1.5rem';
 
         touchElem.style.width = widthPx;
         touchElem.style.height = heightPx;
         touchElem.style.maxWidth = 'none';
         touchElem.style.marginTop = '0';
         touchElem.style.marginLeft = '0';
-        touchElem.style.borderRadius = '1.5rem';
 
         // Handle phone container if it exists
         if (this.phoneContainer) {
@@ -344,86 +346,181 @@ export abstract class BasePlayer extends TypedEmitter<PlayerEvents> {
             this.phoneContainer.style.top = '';
         }
 
-        // Handle android mockup frame - append to phoneContainer so it positions correctly
+        // Handle device mockup frame - append to phoneContainer so it positions correctly
         // Note: frameWidthMultiplier and frameHeightMultiplier are defined earlier for available space calculation
-        let androidFrame = document.getElementById('generic-android-mockup') as HTMLImageElement;
         const phoneContainer =
             this.phoneContainer || (document.getElementsByClassName('phone-container')[0] as HTMLElement);
 
-        // Show frame for all devices (previously only for emulated)
-        // if (!androidFrame && deviceType === 'emulated' && phoneContainer) {
-        if (!androidFrame && phoneContainer) {
-            androidFrame = document.createElement('img');
-            androidFrame.src = genericAndroid;
-            androidFrame.id = 'generic-android-mockup';
-            androidFrame.style.position = 'absolute';
-            androidFrame.style.pointerEvents = 'none';
-            androidFrame.style.zIndex = '0'; // Behind video/touch layers
-            phoneContainer.appendChild(androidFrame);
-        }
+        if (isAndroidTV) {
+            // --- Android TV frame (CSS-based, modern slim design) ---
+            // Remove phone frame if it exists from a previous render
+            const stalePhoneFrame = document.getElementById('generic-android-mockup');
+            if (stalePhoneFrame) stalePhoneFrame.remove();
 
-        if (androidFrame) {
-            // Scale the frame to wrap around the video
+            // Dimensions
+            // Ultra-thin uniform bezel: 1.5% of screen width on each side
+            const bezel = Math.round(scaledWidth * 0.015);
+            const tvBezelH = scaledWidth + bezel * 2;
+            // Total container height = screen + thin bezel top + thin chin + stand area
+            const chinH = bezel;                          // chin = same as side bezel
+            const standAreaH = scaledHeight * 0.09;       // stand takes ~9% of screen height below chin
+            const tvBezelV = bezel + scaledHeight + chinH + standAreaH;
 
-            let frameWidth: number;
-            let frameHeight: number;
-            let frameOffsetX: number;
-            let frameOffsetY: number;
+            // Sharp corners — real TVs have no border-radius on the screen
+            videoElem.style.borderRadius = '0';
+            touchElem.style.borderRadius = '0';
 
-            if (rotation) {
-                // Device is in landscape mode - frame needs to be created in portrait then rotated
-                // The frame PNG has thicker bezels on top/bottom (designed for portrait)
-                // When rotated 90°, those thick bezels become left/right sides
-                // So we need to swap multipliers:
-                // - frameWidth (becomes visual height) should use width multiplier (thicker bezel = 1.08)
-                // - frameHeight (becomes visual width) should use height multiplier (thinner bezel = 1.04)
-                frameWidth = scaledHeight * frameWidthMultiplier; // This becomes visual height (thick bezels on top/bottom)
-                frameHeight = scaledWidth * frameHeightMultiplier; // This becomes visual width (thin bezels on sides)
-
-                androidFrame.style.width = `${frameWidth}px`;
-                androidFrame.style.height = `${frameHeight}px`;
-                androidFrame.style.maxWidth = 'none';
-
-                // Rotate frame 90° to match landscape video
-                androidFrame.style.transform = 'rotateZ(-90deg)';
-                // Transform origin needs to account for the rotation pivot
-                androidFrame.style.transformOrigin = `${frameWidth / 2}px ${frameWidth / 2}px`;
-
-                // After rotation: visual width = frameHeight, visual height = frameWidth
-                const visualFrameWidth = frameHeight;
-                const visualFrameHeight = frameWidth;
-                frameOffsetX = (visualFrameWidth - scaledWidth) / 2;
-                frameOffsetY = (visualFrameHeight - scaledHeight) / 2;
-            } else {
-                // Portrait mode - straightforward
-                frameWidth = scaledWidth * frameWidthMultiplier;
-                frameHeight = scaledHeight * frameHeightMultiplier;
-
-                androidFrame.style.width = `${frameWidth}px`;
-                androidFrame.style.height = `${frameHeight}px`;
-                androidFrame.style.maxWidth = 'none';
-                androidFrame.style.transform = '';
-                androidFrame.style.transformOrigin = 'center center';
-
-                frameOffsetX = (frameWidth - scaledWidth) / 2;
-                frameOffsetY = (frameHeight - scaledHeight) / 2;
+            let tvFrame = document.getElementById('generic-tv-mockup') as HTMLElement;
+            if (!tvFrame && phoneContainer) {
+                tvFrame = document.createElement('div');
+                tvFrame.id = 'generic-tv-mockup';
+                tvFrame.style.position = 'absolute';
+                tvFrame.style.pointerEvents = 'none';
+                tvFrame.style.zIndex = '0';
+                tvFrame.innerHTML = `
+                    <div id="tv-bezel"></div>
+                    <div id="tv-stand-neck"></div>
+                    <div id="tv-stand-base"></div>
+                `;
+                phoneContainer.appendChild(tvFrame);
             }
 
-            // Show frame for all devices (previously only emulated)
-            // if (deviceType === 'emulated') {
-            // Center the frame around the video content
-            androidFrame.style.left = `${-frameOffsetX}px`;
-            androidFrame.style.top = `${-frameOffsetY}px`;
-            androidFrame.style.display = 'block';
+            if (tvFrame) {
+                tvFrame.style.width = `${tvBezelH}px`;
+                tvFrame.style.height = `${tvBezelV}px`;
+                tvFrame.style.left = `${-bezel}px`;
+                tvFrame.style.top = `${-bezel}px`;
 
-            // No margin adjustments needed - video stays at origin
-            videoElem.style.marginTop = '0';
-            videoElem.style.marginLeft = '0';
-            touchElem.style.marginTop = '0';
-            touchElem.style.marginLeft = '0';
-            // } else {
-            //     androidFrame.style.display = 'none';
-            // }
+                // Bezel panel: thin outer shell wrapping screen + chin, sharp corners like a real TV
+                const bezelPanel = document.getElementById('tv-bezel') as HTMLElement;
+                if (bezelPanel) {
+                    const panelH = bezel + scaledHeight + chinH;
+                    bezelPanel.style.position = 'absolute';
+                    bezelPanel.style.top = '0';
+                    bezelPanel.style.left = '0';
+                    bezelPanel.style.width = `${tvBezelH}px`;
+                    bezelPanel.style.height = `${panelH}px`;
+                    bezelPanel.style.background = 'linear-gradient(175deg, #3a3a3a 0%, #1c1c1c 60%, #141414 100%)';
+                    bezelPanel.style.borderRadius = '0';
+                    bezelPanel.style.boxShadow = [
+                        '0 6px 32px rgba(0,0,0,0.65)',
+                        '0 2px 6px rgba(0,0,0,0.4)',
+                        'inset 0 1px 0 rgba(255,255,255,0.07)',
+                        'inset 0 -1px 0 rgba(0,0,0,0.3)',
+                    ].join(', ');
+                    bezelPanel.style.boxSizing = 'border-box';
+                }
+
+                // Stand neck: slim flat trapezoid centered below screen
+                const neck = document.getElementById('tv-stand-neck') as HTMLElement;
+                if (neck) {
+                    const neckW = Math.round(tvBezelH * 0.055); // ~5.5% of total width
+                    const neckH = Math.round(standAreaH * 0.72);
+                    const neckTop = bezel + scaledHeight + chinH;
+                    neck.style.position = 'absolute';
+                    neck.style.top = `${neckTop}px`;
+                    neck.style.left = `${(tvBezelH - neckW) / 2}px`;
+                    neck.style.width = `${neckW}px`;
+                    neck.style.height = `${neckH}px`;
+                    neck.style.background = 'linear-gradient(to bottom, #303030 0%, #1e1e1e 100%)';
+                    neck.style.borderRadius = `0 0 ${Math.round(neckW * 0.25)}px ${Math.round(neckW * 0.25)}px`;
+                    neck.style.boxShadow = 'inset -1px 0 0 rgba(255,255,255,0.04)';
+                }
+
+                // Stand base: wide, very flat curved bar (elliptical pill)
+                const base = document.getElementById('tv-stand-base') as HTMLElement;
+                if (base) {
+                    const baseW = Math.round(tvBezelH * 0.38); // ~38% of total width
+                    const baseH = Math.round(standAreaH * 0.32);
+                    const baseTop = bezel + scaledHeight + chinH + standAreaH - baseH;
+                    base.style.position = 'absolute';
+                    base.style.top = `${baseTop}px`;
+                    base.style.left = `${(tvBezelH - baseW) / 2}px`;
+                    base.style.width = `${baseW}px`;
+                    base.style.height = `${baseH}px`;
+                    base.style.background = 'linear-gradient(to bottom, #333333 0%, #1a1a1a 100%)';
+                    base.style.borderRadius = `${Math.round(baseH * 0.5)}px`;
+                    base.style.boxShadow = [
+                        '0 3px 10px rgba(0,0,0,0.55)',
+                        'inset 0 1px 0 rgba(255,255,255,0.06)',
+                    ].join(', ');
+                }
+            }
+        } else {
+            // --- Android phone frame (PNG-based) ---
+            // Remove TV frame if it exists from a previous render
+            const staleTvFrame = document.getElementById('generic-tv-mockup');
+            if (staleTvFrame) staleTvFrame.remove();
+
+            // Restore phone screen border-radius
+            videoElem.style.borderRadius = '1.5rem';
+            touchElem.style.borderRadius = '1.5rem';
+
+            let androidFrame = document.getElementById('generic-android-mockup') as HTMLImageElement;
+            if (!androidFrame && phoneContainer) {
+                androidFrame = document.createElement('img');
+                androidFrame.src = genericAndroid;
+                androidFrame.id = 'generic-android-mockup';
+                androidFrame.style.position = 'absolute';
+                androidFrame.style.pointerEvents = 'none';
+                androidFrame.style.zIndex = '0'; // Behind video/touch layers
+                phoneContainer.appendChild(androidFrame);
+            }
+
+            if (androidFrame) {
+                let frameWidth: number;
+                let frameHeight: number;
+                let frameOffsetX: number;
+                let frameOffsetY: number;
+
+                if (rotation) {
+                    // Device is in landscape mode - frame needs to be created in portrait then rotated
+                    // The frame PNG has thicker bezels on top/bottom (designed for portrait)
+                    // When rotated 90°, those thick bezels become left/right sides
+                    // So we need to swap multipliers:
+                    // - frameWidth (becomes visual height) should use width multiplier (thicker bezel = 1.08)
+                    // - frameHeight (becomes visual width) should use height multiplier (thinner bezel = 1.04)
+                    frameWidth = scaledHeight * frameWidthMultiplier; // This becomes visual height (thick bezels on top/bottom)
+                    frameHeight = scaledWidth * frameHeightMultiplier; // This becomes visual width (thin bezels on sides)
+
+                    androidFrame.style.width = `${frameWidth}px`;
+                    androidFrame.style.height = `${frameHeight}px`;
+                    androidFrame.style.maxWidth = 'none';
+
+                    // Rotate frame 90° to match landscape video
+                    androidFrame.style.transform = 'rotateZ(-90deg)';
+                    // Transform origin needs to account for the rotation pivot
+                    androidFrame.style.transformOrigin = `${frameWidth / 2}px ${frameWidth / 2}px`;
+
+                    // After rotation: visual width = frameHeight, visual height = frameWidth
+                    const visualFrameWidth = frameHeight;
+                    const visualFrameHeight = frameWidth;
+                    frameOffsetX = (visualFrameWidth - scaledWidth) / 2;
+                    frameOffsetY = (visualFrameHeight - scaledHeight) / 2;
+                } else {
+                    // Portrait mode - straightforward
+                    frameWidth = scaledWidth * frameWidthMultiplier;
+                    frameHeight = scaledHeight * frameHeightMultiplier;
+
+                    androidFrame.style.width = `${frameWidth}px`;
+                    androidFrame.style.height = `${frameHeight}px`;
+                    androidFrame.style.maxWidth = 'none';
+                    androidFrame.style.transform = '';
+                    androidFrame.style.transformOrigin = 'center center';
+
+                    frameOffsetX = (frameWidth - scaledWidth) / 2;
+                    frameOffsetY = (frameHeight - scaledHeight) / 2;
+                }
+
+                androidFrame.style.left = `${-frameOffsetX}px`;
+                androidFrame.style.top = `${-frameOffsetY}px`;
+                androidFrame.style.display = 'block';
+
+                videoElem.style.marginTop = '0';
+                videoElem.style.marginLeft = '0';
+                touchElem.style.marginTop = '0';
+                touchElem.style.marginLeft = '0';
+            }
         }
 
         // Set wrapper dimensions based on VISIBLE size (after UI rotation)
@@ -431,12 +528,15 @@ export abstract class BasePlayer extends TypedEmitter<PlayerEvents> {
         const scaledVisibleHeight = visibleHeight * this.zoomLevel;
 
         // Calculate wrapper size to accommodate frame
-        // Now showing frame for all devices (previously only emulated)
         let wrapperWidth: number;
         let wrapperHeight: number;
-        // if (deviceType === 'emulated') {
-        if (rotation) {
-            // In device landscape (auto-rotate): frame is rotated, so its visual dimensions are swapped
+        if (isAndroidTV) {
+            // TV frame: wrapper must contain bezel + stand
+            // bezel = 1.5% each side horizontally, bezel + chin + stand vertically
+            wrapperWidth = scaledVisibleWidth * frameWidthMultiplier;
+            wrapperHeight = scaledVisibleHeight * frameHeightMultiplier;
+        } else if (rotation) {
+            // Phone in landscape (auto-rotate): frame is rotated, so its visual dimensions are swapped
             // frameWidth = scaledHeight * 1.08 becomes visual height
             // frameHeight = scaledWidth * 1.04 becomes visual width
             wrapperWidth = scaledVisibleWidth * frameHeightMultiplier;
@@ -451,10 +551,6 @@ export abstract class BasePlayer extends TypedEmitter<PlayerEvents> {
             wrapperWidth = scaledVisibleWidth * frameWidthMultiplier;
             wrapperHeight = scaledVisibleHeight * frameHeightMultiplier;
         }
-        // } else {
-        //     wrapperWidth = scaledVisibleWidth;
-        //     wrapperHeight = scaledVisibleHeight;
-        // }
 
         videoWrapper.style.width = `${wrapperWidth}px`;
         videoWrapper.style.height = `${wrapperHeight}px`;

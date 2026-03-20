@@ -3,16 +3,17 @@ import { KeyCodeControlMessage } from '../../controlMessage/KeyCodeControlMessag
 import { StreamClientScrcpy } from '../client/StreamClientScrcpy';
 
 /**
- * TVRemote - A realistic floating remote control for Android TV.
- * Creates a draggable overlay panel with all standard TV remote buttons.
- * Each button sends the corresponding Android KeyEvent to the device.
+ * TVRemote — Floating draggable panel, compact 2-row grid layout per section.
+ * All groups sit in a single horizontal line; each group uses a 2×3 grid
+ * so height equals ~2 buttons while width is only 3 buttons wide.
+ * Numpad (3×4) sits at the far right.
  */
 export class TVRemote {
     private readonly holder: HTMLDivElement;
     private visible = false;
 
     constructor(private readonly client: StreamClientScrcpy) {
-        this.holder = this.buildRemote();
+        this.holder = this.buildPanel();
         document.body.appendChild(this.holder);
         this.initDrag();
     }
@@ -24,27 +25,42 @@ export class TVRemote {
         this.holder.style.display = this.visible ? 'flex' : 'none';
     }
 
-    public show(): void {
-        this.visible = true;
-        this.holder.style.display = 'flex';
-    }
-
-    public hide(): void {
-        this.visible = false;
-        this.holder.style.display = 'none';
-    }
-
     public isVisible(): boolean {
         return this.visible;
     }
 
-    public destroy(): void {
-        if (this.holder.parentElement) {
-            this.holder.parentElement.removeChild(this.holder);
-        }
+    // ─── Drag ────────────────────────────────────────────────────────────────
+
+    private initDrag(): void {
+        const handle = this.holder.querySelector('.tv-remote-titlebar') as HTMLElement;
+        if (!handle) return;
+        let startX = 0, startY = 0, origLeft = 0, origTop = 0, dragging = false;
+
+        handle.addEventListener('pointerdown', (e) => {
+            if ((e.target as HTMLElement).tagName === 'BUTTON') return;
+            e.preventDefault();
+            dragging = true;
+            handle.setPointerCapture(e.pointerId);
+            const rect = this.holder.getBoundingClientRect();
+            startX = e.clientX; startY = e.clientY;
+            origLeft = rect.left; origTop = rect.top;
+            this.holder.style.transform = 'none';
+            this.holder.style.left = `${origLeft}px`;
+            this.holder.style.top = `${origTop}px`;
+            this.holder.classList.add('tv-remote-dragging');
+        });
+        handle.addEventListener('pointermove', (e) => {
+            if (!dragging || !handle.hasPointerCapture(e.pointerId)) return;
+            this.holder.style.left = `${origLeft + e.clientX - startX}px`;
+            this.holder.style.top  = `${origTop  + e.clientY - startY}px`;
+        });
+        handle.addEventListener('pointerup', () => {
+            dragging = false;
+            this.holder.classList.remove('tv-remote-dragging');
+        });
     }
 
-    // ─── Key sending ─────────────────────────────────────────────────────────
+    // ─── Key binding ─────────────────────────────────────────────────────────
 
     private bindKey(el: HTMLElement, keycode: number): void {
         el.addEventListener('pointerdown', (e) => {
@@ -67,163 +83,135 @@ export class TVRemote {
 
     // ─── DOM builder ─────────────────────────────────────────────────────────
 
-    private buildRemote(): HTMLDivElement {
-        const remote = document.createElement('div');
-        remote.className = 'tv-remote';
-        remote.style.display = 'none';
+    private buildPanel(): HTMLDivElement {
+        const panel = document.createElement('div');
+        panel.className = 'tv-remote-panel';
+        panel.style.display = 'none';
 
-        // Header / drag handle
-        const header = document.createElement('div');
-        header.className = 'tv-remote-header';
-        header.innerHTML = `
-            <div class="tv-remote-drag-handle">
-                <span class="tv-remote-title">Remote</span>
-            </div>
-            <button class="tv-remote-close" title="Close remote">✕</button>
-        `;
-        header.querySelector('.tv-remote-close')!.addEventListener('click', () => this.hide());
-        remote.appendChild(header);
+        // Title bar / drag handle
+        const titlebar = document.createElement('div');
+        titlebar.className = 'tv-remote-titlebar';
+        const grip1 = document.createElement('div'); grip1.className = 'tv-remote-grip';
+        const title = document.createElement('span'); title.className = 'tv-remote-title'; title.textContent = 'TV Remote';
+        const grip2 = document.createElement('div'); grip2.className = 'tv-remote-grip';
+        titlebar.appendChild(grip1); titlebar.appendChild(title); titlebar.appendChild(grip2);
+        panel.appendChild(titlebar);
 
-        // Body
-        const body = document.createElement('div');
-        body.className = 'tv-remote-body';
+        // Single content row — all groups side by side
+        const row = document.createElement('div');
+        row.className = 'tv-remote-row';
 
-        // ── Row 1: Power  |  Mute  |  Settings ──────────────────────────────
-        const row1 = this.row();
-        row1.appendChild(this.btn('⏻', 'Power', KeyEvent.KEYCODE_POWER, 'tv-btn-power'));
-        row1.appendChild(this.btn('🔇', 'Mute', KeyEvent.KEYCODE_MUTE, 'tv-btn-icon'));
-        row1.appendChild(this.btn('⚙', 'Settings', KeyEvent.KEYCODE_SETTINGS, 'tv-btn-icon'));
-        body.appendChild(row1);
+        // ── Group 1: System  (2×3 grid: top row Power/Mute/Settings, bottom row Back/Home/Menu) ──
+        row.appendChild(this.grid2x3([
+            this.btn('⏻', 'Power',    KeyEvent.KEYCODE_POWER,    'tv-btn-power'),
+            this.btn('🔇', 'Mute',     KeyEvent.KEYCODE_MUTE),
+            this.btn('⚙',  'Settings', KeyEvent.KEYCODE_SETTINGS),
+            this.btn('⬅', 'Back',     KeyEvent.KEYCODE_BACK,     'tv-btn-sys'),
+            this.btn('⌂', 'Home',     KeyEvent.KEYCODE_HOME,     'tv-btn-sys'),
+            this.btn('☰', 'Menu',     KeyEvent.KEYCODE_MENU,     'tv-btn-sys'),
+        ]));
 
-        // ── Divider ──────────────────────────────────────────────────────────
-        body.appendChild(this.divider());
+        row.appendChild(this.sep());
 
-        // ── D-Pad ────────────────────────────────────────────────────────────
+        // ── Group 2: D-Pad (3×3 grid — unchanged) ────────────────────────────
         const dpad = document.createElement('div');
-        dpad.className = 'tv-remote-dpad';
+        dpad.className = 'tv-bar-dpad';
+        const up    = this.btn('▲', 'Up',     KeyEvent.KEYCODE_DPAD_UP);
+        const left  = this.btn('◀', 'Left',   KeyEvent.KEYCODE_DPAD_LEFT);
+        const ok    = this.btn('OK','Select',  KeyEvent.KEYCODE_DPAD_CENTER, 'tv-bar-ok');
+        const right = this.btn('▶', 'Right',  KeyEvent.KEYCODE_DPAD_RIGHT);
+        const down  = this.btn('▼', 'Down',   KeyEvent.KEYCODE_DPAD_DOWN);
+        up.classList.add('tv-bar-dpad-up');
+        left.classList.add('tv-bar-dpad-left');
+        ok.classList.add('tv-bar-dpad-ok');
+        right.classList.add('tv-bar-dpad-right');
+        down.classList.add('tv-bar-dpad-down');
+        dpad.appendChild(up); dpad.appendChild(left); dpad.appendChild(ok);
+        dpad.appendChild(right); dpad.appendChild(down);
+        row.appendChild(dpad);
 
-        // Up
-        const dpadUp = this.dpadBtn('▲', 'Up', KeyEvent.KEYCODE_DPAD_UP);
-        dpadUp.classList.add('tv-dpad-up');
-        dpad.appendChild(dpadUp);
+        row.appendChild(this.sep());
 
-        // Left
-        const dpadLeft = this.dpadBtn('◀', 'Left', KeyEvent.KEYCODE_DPAD_LEFT);
-        dpadLeft.classList.add('tv-dpad-left');
-        dpad.appendChild(dpadLeft);
+        // ── Group 3: Vol+CH (2×2: VOL+/CH+ top, VOL−/CH− bottom, labelled) ──
+        row.appendChild(this.volChGroup());
 
-        // Center / OK
-        const dpadOk = this.dpadBtn('OK', 'Select', KeyEvent.KEYCODE_DPAD_CENTER);
-        dpadOk.classList.add('tv-dpad-ok');
-        dpad.appendChild(dpadOk);
+        row.appendChild(this.sep());
 
-        // Right
-        const dpadRight = this.dpadBtn('▶', 'Right', KeyEvent.KEYCODE_DPAD_RIGHT);
-        dpadRight.classList.add('tv-dpad-right');
-        dpad.appendChild(dpadRight);
+        // ── Group 4: Media (2×3 grid: ⏮⏪⏯ top, ⏩⏭_ bottom) ────────────────
+        row.appendChild(this.grid2x3([
+            this.btn('⏮', 'Previous',   KeyEvent.KEYCODE_MEDIA_PREVIOUS,    'tv-btn-media'),
+            this.btn('⏪', 'Rewind',     KeyEvent.KEYCODE_MEDIA_REWIND,      'tv-btn-media'),
+            this.btn('⏯', 'Play/Pause', KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,  'tv-btn-media tv-btn-media-play'),
+            this.btn('⏩', 'Fast Fwd',  KeyEvent.KEYCODE_MEDIA_FAST_FORWARD,'tv-btn-media'),
+            this.btn('⏭', 'Next',       KeyEvent.KEYCODE_MEDIA_NEXT,        'tv-btn-media'),
+            this.placeholder(),
+        ]));
 
-        // Down
-        const dpadDown = this.dpadBtn('▼', 'Down', KeyEvent.KEYCODE_DPAD_DOWN);
-        dpadDown.classList.add('tv-dpad-down');
-        dpad.appendChild(dpadDown);
+        row.appendChild(this.sep());
 
-        body.appendChild(dpad);
-
-        // ── Row: Back  |  Home  |  Menu ──────────────────────────────────────
-        body.appendChild(this.divider());
-        const row2 = this.row();
-        row2.appendChild(this.btn('⬅', 'Back', KeyEvent.KEYCODE_BACK, 'tv-btn-sys'));
-        row2.appendChild(this.btn('⌂', 'Home', KeyEvent.KEYCODE_HOME, 'tv-btn-sys'));
-        row2.appendChild(this.btn('☰', 'Menu', KeyEvent.KEYCODE_MENU, 'tv-btn-sys'));
-        body.appendChild(row2);
-
-        // ── Divider ──────────────────────────────────────────────────────────
-        body.appendChild(this.divider());
-
-        // ── Volume & Channel ─────────────────────────────────────────────────
-        const vcRow = this.row();
-
-        const volCol = document.createElement('div');
-        volCol.className = 'tv-remote-col';
-        const volLabel = document.createElement('div');
-        volLabel.className = 'tv-col-label';
-        volLabel.textContent = 'VOL';
-        const volUp = this.btn('＋', 'Volume Up', KeyEvent.KEYCODE_VOLUME_UP, 'tv-btn-rocker tv-btn-rocker-top');
-        const volDown = this.btn('－', 'Volume Down', KeyEvent.KEYCODE_VOLUME_DOWN, 'tv-btn-rocker tv-btn-rocker-bot');
-        volCol.appendChild(volLabel);
-        volCol.appendChild(volUp);
-        volCol.appendChild(volDown);
-
-        const chCol = document.createElement('div');
-        chCol.className = 'tv-remote-col';
-        const chLabel = document.createElement('div');
-        chLabel.className = 'tv-col-label';
-        chLabel.textContent = 'CH';
-        const chUp = this.btn('▲', 'Channel Up', KeyEvent.KEYCODE_CHANNEL_UP, 'tv-btn-rocker tv-btn-rocker-top');
-        const chDown = this.btn('▼', 'Channel Down', KeyEvent.KEYCODE_CHANNEL_DOWN, 'tv-btn-rocker tv-btn-rocker-bot');
-        chCol.appendChild(chLabel);
-        chCol.appendChild(chUp);
-        chCol.appendChild(chDown);
-
-        vcRow.appendChild(volCol);
-        vcRow.appendChild(chCol);
-        body.appendChild(vcRow);
-
-        // ── Divider ──────────────────────────────────────────────────────────
-        body.appendChild(this.divider());
-
-        // ── Media controls ───────────────────────────────────────────────────
-        const mediaRow = this.row();
-        mediaRow.appendChild(this.btn('⏮', 'Previous', KeyEvent.KEYCODE_MEDIA_PREVIOUS, 'tv-btn-media'));
-        mediaRow.appendChild(this.btn('⏪', 'Rewind', KeyEvent.KEYCODE_MEDIA_REWIND, 'tv-btn-media'));
-        mediaRow.appendChild(this.btn('⏯', 'Play/Pause', KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, 'tv-btn-media tv-btn-media-play'));
-        mediaRow.appendChild(this.btn('⏩', 'Fast Forward', KeyEvent.KEYCODE_MEDIA_FAST_FORWARD, 'tv-btn-media'));
-        mediaRow.appendChild(this.btn('⏭', 'Next', KeyEvent.KEYCODE_MEDIA_NEXT, 'tv-btn-media'));
-        body.appendChild(mediaRow);
-
-        // ── Divider ──────────────────────────────────────────────────────────
-        body.appendChild(this.divider());
-
-        // ── Number pad ───────────────────────────────────────────────────────
+        // ── Group 5: Numpad (3×4) ─────────────────────────────────────────────
         const numpad = document.createElement('div');
-        numpad.className = 'tv-remote-numpad';
-
-        const numCodes: Record<string, number> = {
-            '1': KeyEvent.KEYCODE_1,
-            '2': KeyEvent.KEYCODE_2,
-            '3': KeyEvent.KEYCODE_3,
-            '4': KeyEvent.KEYCODE_4,
-            '5': KeyEvent.KEYCODE_5,
-            '6': KeyEvent.KEYCODE_6,
-            '7': KeyEvent.KEYCODE_7,
-            '8': KeyEvent.KEYCODE_8,
-            '9': KeyEvent.KEYCODE_9,
-            '🔍': KeyEvent.KEYCODE_SEARCH,
-            '0': KeyEvent.KEYCODE_0,
-            '⌫': KeyEvent.KEYCODE_DEL,
-        };
-
-        for (const [label, code] of Object.entries(numCodes)) {
-            const btn = this.btn(label, label, code, 'tv-btn-num');
-            numpad.appendChild(btn);
+        numpad.className = 'tv-bar-numpad';
+        const nums: [string, number][] = [
+            ['1', KeyEvent.KEYCODE_1], ['2', KeyEvent.KEYCODE_2], ['3', KeyEvent.KEYCODE_3],
+            ['4', KeyEvent.KEYCODE_4], ['5', KeyEvent.KEYCODE_5], ['6', KeyEvent.KEYCODE_6],
+            ['7', KeyEvent.KEYCODE_7], ['8', KeyEvent.KEYCODE_8], ['9', KeyEvent.KEYCODE_9],
+            ['🔍', KeyEvent.KEYCODE_SEARCH], ['0', KeyEvent.KEYCODE_0], ['⌫', KeyEvent.KEYCODE_DEL],
+        ];
+        for (const [label, code] of nums) {
+            numpad.appendChild(this.btn(label, label, code, 'tv-btn-num'));
         }
-        body.appendChild(numpad);
+        row.appendChild(numpad);
 
-        remote.appendChild(body);
-        return remote;
+        panel.appendChild(row);
+        return panel;
     }
 
     // ─── Helpers ─────────────────────────────────────────────────────────────
 
-    private row(): HTMLDivElement {
-        const row = document.createElement('div');
-        row.className = 'tv-remote-row';
-        return row;
+    /** 2-row × 3-col grid. Pass exactly 6 elements (use placeholder() for empty cell). */
+    private grid2x3(cells: HTMLElement[]): HTMLDivElement {
+        const g = document.createElement('div');
+        g.className = 'tv-grid-2x3';
+        cells.forEach((c) => g.appendChild(c));
+        return g;
     }
 
-    private divider(): HTMLDivElement {
+    /** Vol + CH as a labelled 2×2 block */
+    private volChGroup(): HTMLDivElement {
+        const wrap = document.createElement('div');
+        wrap.className = 'tv-volch-group';
+
+        // Header labels row
+        const labels = document.createElement('div');
+        labels.className = 'tv-volch-labels';
+        const vLbl = document.createElement('span'); vLbl.className = 'tv-volch-label'; vLbl.textContent = 'VOL';
+        const cLbl = document.createElement('span'); cLbl.className = 'tv-volch-label'; cLbl.textContent = 'CH';
+        labels.appendChild(vLbl); labels.appendChild(cLbl);
+
+        // Buttons grid: VOL+ | CH+  /  VOL− | CH−
+        const grid = document.createElement('div');
+        grid.className = 'tv-volch-grid';
+        grid.appendChild(this.btn('+', 'Volume Up',    KeyEvent.KEYCODE_VOLUME_UP,    'tv-bar-rocker-btn'));
+        grid.appendChild(this.btn('+', 'Channel Up',   KeyEvent.KEYCODE_CHANNEL_UP,   'tv-bar-rocker-btn'));
+        grid.appendChild(this.btn('−', 'Volume Down',  KeyEvent.KEYCODE_VOLUME_DOWN,  'tv-bar-rocker-btn'));
+        grid.appendChild(this.btn('−', 'Channel Down', KeyEvent.KEYCODE_CHANNEL_DOWN, 'tv-bar-rocker-btn'));
+
+        wrap.appendChild(labels);
+        wrap.appendChild(grid);
+        return wrap;
+    }
+
+    private sep(): HTMLDivElement {
+        const s = document.createElement('div');
+        s.className = 'tv-bar-sep';
+        return s;
+    }
+
+    /** Invisible spacer cell to fill a 2×3 grid */
+    private placeholder(): HTMLDivElement {
         const d = document.createElement('div');
-        d.className = 'tv-remote-divider';
+        d.className = 'tv-cell-placeholder';
         return d;
     }
 
@@ -234,73 +222,5 @@ export class TVRemote {
         btn.textContent = label;
         this.bindKey(btn, keycode);
         return btn;
-    }
-
-    private dpadBtn(label: string, title: string, keycode: number): HTMLButtonElement {
-        const btn = document.createElement('button');
-        btn.className = 'tv-btn tv-dpad-btn';
-        btn.title = title;
-        btn.textContent = label;
-        this.bindKey(btn, keycode);
-        return btn;
-    }
-
-    // ─── Drag ────────────────────────────────────────────────────────────────
-
-    private initDrag(): void {
-        const el = this.holder;
-        const handle = el.querySelector('.tv-remote-drag-handle') as HTMLElement;
-        if (!handle) return;
-
-        let startX = 0;
-        let startY = 0;
-        let startLeft = 0;
-        let startTop = 0;
-        let dragging = false;
-
-        // Default position: right side of screen, vertically centered
-        el.style.position = 'fixed';
-        el.style.right = '16px';
-        el.style.top = '50%';
-        el.style.transform = 'translateY(-50%)';
-
-        const onMove = (e: PointerEvent) => {
-            if (!dragging) return;
-            const dx = e.clientX - startX;
-            const dy = e.clientY - startY;
-            el.style.transform = '';
-            el.style.left = `${startLeft + dx}px`;
-            el.style.top = `${startTop + dy}px`;
-            el.style.right = 'auto';
-        };
-
-        const onUp = () => {
-            dragging = false;
-            el.classList.remove('tv-remote-dragging');
-            window.removeEventListener('pointermove', onMove);
-            window.removeEventListener('pointerup', onUp);
-        };
-
-        handle.addEventListener('pointerdown', (e: PointerEvent) => {
-            // Don't drag if target is the close button
-            if ((e.target as HTMLElement).classList.contains('tv-remote-close')) return;
-            dragging = true;
-            el.classList.add('tv-remote-dragging');
-
-            const rect = el.getBoundingClientRect();
-            startLeft = rect.left;
-            startTop = rect.top;
-            startX = e.clientX;
-            startY = e.clientY;
-
-            // Switch from right-anchored to left-anchored so offset math works
-            el.style.transform = '';
-            el.style.left = `${rect.left}px`;
-            el.style.top = `${rect.top}px`;
-            el.style.right = 'auto';
-
-            window.addEventListener('pointermove', onMove);
-            window.addEventListener('pointerup', onUp);
-        });
     }
 }

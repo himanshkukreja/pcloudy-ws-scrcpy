@@ -678,7 +678,7 @@ export abstract class BasePlayer extends TypedEmitter<PlayerEvents> {
         videoWrapper.style.left = '';
         videoWrapper.style.top = '';
 
-        // Position the device view using flexbox
+        // Position the device view using flexbox (standard horizontal row layout).
         deviceView.style.width = '100%';
         deviceView.style.height = '100vh';
         deviceView.style.maxWidth = 'none';
@@ -689,11 +689,10 @@ export abstract class BasePlayer extends TypedEmitter<PlayerEvents> {
         deviceView.style.overflow = 'auto'; // Allow scrolling when zoomed phone exceeds viewport
 
         // Center the phone in the space to the right of the toolbar.
-        // On desktop/tablet the toolbar is a flex sibling on the left — offset padding so
-        // justifyContent:center centres the phone in the remaining space, not the full width.
         deviceView.style.justifyContent = 'center';
         deviceView.style.paddingLeft  = (isMobile || useBottomToolbar) ? '0' : `${controlPanelWidth}px`;
         deviceView.style.paddingRight = '0';
+        deviceView.style.paddingTop = '0';
 
         if (isMobile || useBottomToolbar) {
             // Mobile/TV/landscape: add bottom padding for toolbar + clearance so phone doesn't overlap

@@ -43,6 +43,8 @@ const BUTTONS = [
 ];
 
 export class GoogToolBox extends ToolBox {
+    public tvRemote?: TVRemote;
+
     protected constructor(list: ToolBoxElement<any>[]) {
         super(list);
     }
@@ -142,15 +144,20 @@ export class GoogToolBox extends ToolBox {
         // Android TV: add a remote control toggle button
         const params = new URLSearchParams(window.location.search);
         const isAndroidTV = params.get('deviceType') === 'androidtv';
+        let tvRemote: TVRemote | undefined;
         if (isAndroidTV) {
-            const tvRemote = new TVRemote(client);
+            tvRemote = new TVRemote(client);
             const remoteBtn = new ToolBoxButton('TV Remote', SvgImage.Icon.TV_REMOTE);
             remoteBtn.addEventListener('click', () => {
-                tvRemote.toggle();
+                tvRemote!.toggle();
             });
-            elements.unshift(remoteBtn); // Put at top of toolbar
+            elements.unshift(remoteBtn);
         }
 
-        return new GoogToolBox(elements);
+        const toolBox = new GoogToolBox(elements);
+        if (tvRemote) {
+            toolBox.tvRemote = tvRemote;
+        }
+        return toolBox;
     }
 }

@@ -194,9 +194,6 @@ export abstract class BasePlayer extends TypedEmitter<PlayerEvents> {
         const deviceType = params.get('deviceType') || 'emulated';
         const isAndroidTV = deviceType === 'androidtv';
 
-        // True once the actual video stream has started (not just connecting/loading state)
-        const isStreaming = !!this.screenInfo?.videoSize;
-
         // Get video dimensions from screenInfo (actual video stream size) or displayInfo as fallback
         let deviceWidth: number;
         let deviceHeight: number;
@@ -457,18 +454,10 @@ export abstract class BasePlayer extends TypedEmitter<PlayerEvents> {
             const staleImgFrame = document.getElementById('generic-android-mockup');
             if (staleImgFrame) staleImgFrame.remove();
 
-            const existingPhoneFrame = document.getElementById('generic-phone-mockup') as HTMLElement;
+            // Always render the phone frame in both connecting and streaming states
+            // so the connecting overlay matches the frame shape exactly.
 
-            if (!isStreaming) {
-                // Loading/connecting state: hide the phone frame so the loading overlay
-                // doesn't show bezel borders poking out around it (double-frame effect).
-                if (existingPhoneFrame) existingPhoneFrame.style.display = 'none';
-                videoElem.style.borderRadius = '1.5rem';
-                touchElem.style.borderRadius = '1.5rem';
-            } else {
-                // Streaming state: show/build the phone frame.
-                if (existingPhoneFrame) existingPhoneFrame.style.display = '';
-
+            {
                 // Bezel sizes computed from short/long sides so proportions are correct
                 // in both portrait and landscape without needing CSS rotation.
                 const shortSide = rotation ? scaledHeight : scaledWidth;
@@ -490,17 +479,12 @@ export abstract class BasePlayer extends TypedEmitter<PlayerEvents> {
                 videoElem.style.borderRadius = `${screenCorner}px`;
                 touchElem.style.borderRadius = `${screenCorner}px`;
 
-                // Cable: connector + straight drop + rounded tip. Portrait only.
-                const showCable  = !rotation;
-                const cableW     = Math.round(shortSide * 0.028);
-                const connectorH = Math.round(longSide  * 0.018);
-                const connectorW = Math.round(cableW * 1.7);
-                const cableBodyH = Math.round(longSide  * 0.085); // includes the "hang" length
-                const totalExtraH = showCable ? (connectorH + cableBodyH) : 0;
+                // Match the loading overlay's corner radius to the frame so it looks identical
+                const loadingOverlay = phoneContainer?.querySelector('.video-loading-overlay') as HTMLElement | null;
+                if (loadingOverlay) loadingOverlay.style.borderRadius = `${screenCorner}px`;
 
-                if (this.phoneContainer) {
-                    this.phoneContainer.style.height = `${scaledHeight + totalExtraH}px`;
-                }
+                // No cable — phoneContainer stays exactly scaledHeight so the device
+                // remains vertically centered in the wrapper.
 
                 let phoneFrame = document.getElementById('generic-phone-mockup') as HTMLElement;
                 if (!phoneFrame && phoneContainer) {
@@ -514,9 +498,6 @@ export abstract class BasePlayer extends TypedEmitter<PlayerEvents> {
                         <div id="phone-btn-vol-up"></div>
                         <div id="phone-btn-vol-down"></div>
                         <div id="phone-btn-power"></div>
-                        <div id="phone-usbc-connector"></div>
-                        <div id="phone-cable-straight"></div>
-                        <div id="phone-cable-hang"></div>
                     `;
                     phoneContainer.appendChild(phoneFrame);
                 }
@@ -525,7 +506,7 @@ export abstract class BasePlayer extends TypedEmitter<PlayerEvents> {
                     phoneFrame.style.transform = '';
                     phoneFrame.style.transformOrigin = 'center center';
                     phoneFrame.style.width  = `${phoneFrameW}px`;
-                    phoneFrame.style.height = `${phoneFrameH + totalExtraH}px`;
+                    phoneFrame.style.height = `${phoneFrameH}px`;
 
                     // Offset so the video sits exactly inside the bezel.
                     // Landscape: long side is horizontal, so "top" bezel is now the left edge.
@@ -630,41 +611,6 @@ export abstract class BasePlayer extends TypedEmitter<PlayerEvents> {
                             power.style.borderRadius = `0 ${btnW}px ${btnW}px 0`;
                             power.style.boxShadow = 'inset 0 1px 0 rgba(255,255,255,0.06)';
                         }
-                    }
-
-                    // Cable: USB-C connector + straight drop with rounded tip. Portrait only.
-                    const connector = document.getElementById('phone-usbc-connector') as HTMLElement;
-                    const straight  = document.getElementById('phone-cable-straight') as HTMLElement;
-                    const hang      = document.getElementById('phone-cable-hang')     as HTMLElement;
-
-                    if (hang) hang.style.display = 'none'; // no separate hang element
-
-                    if (showCable) {
-                        if (connector) {
-                            connector.style.display = '';
-                            connector.style.position = 'absolute';
-                            connector.style.top  = `${phoneFrameH}px`;
-                            connector.style.left = `${(phoneFrameW - connectorW) / 2}px`;
-                            connector.style.width  = `${connectorW}px`;
-                            connector.style.height = `${connectorH}px`;
-                            connector.style.background = 'linear-gradient(to bottom, #555 0%, #333 100%)';
-                            connector.style.borderRadius = `0 0 ${Math.round(connectorW * 0.25)}px ${Math.round(connectorW * 0.25)}px`;
-                            connector.style.boxShadow = '0 1px 3px rgba(0,0,0,0.6)';
-                        }
-                        if (straight) {
-                            const tipR = Math.round(cableW / 2);
-                            straight.style.display = '';
-                            straight.style.position = 'absolute';
-                            straight.style.top  = `${phoneFrameH + connectorH}px`;
-                            straight.style.left = `${(phoneFrameW - cableW) / 2}px`;
-                            straight.style.width  = `${cableW}px`;
-                            straight.style.height = `${cableBodyH}px`;
-                            straight.style.background = 'linear-gradient(to right, #3a3a3a 0%, #555 40%, #3a3a3a 100%)';
-                            straight.style.borderRadius = `0 0 ${tipR}px ${tipR}px`;
-                        }
-                    } else {
-                        if (connector) connector.style.display = 'none';
-                        if (straight)  straight.style.display  = 'none';
                     }
                 }
             }

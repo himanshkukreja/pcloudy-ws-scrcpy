@@ -379,19 +379,30 @@ export class StreamClientScrcpy
         const googMoreBox = (this.moreBox = new GoogMoreBox(udid, player, this));
         const moreBox = googMoreBox.getHolderElement();
         googMoreBox.setOnStop(stop);
-        const googToolBox = GoogToolBox.createToolBox(udid, player, this, moreBox);
-        this.controlButtons = googToolBox.getHolderElement();
 
-        // Show control buttons or placeholder based on testExecution mode
-        if (!this.params.testExecution) {
-            // Normal mode: show actual controls
-            deviceView.appendChild(this.controlButtons);
-        } else {
-            // Test execution mode: show placeholder of same size
-            const placeholder = document.createElement('div');
-            placeholder.className = 'test-execution-placeholder';
-            deviceView.appendChild(placeholder);
+        // Check if the toolbox should be hidden (when embedded in pcloudy UI)
+        const urlParams = new URLSearchParams(window.location.search);
+        const hideToolbox = urlParams.get('hideToolbox') === 'true';
+
+        if (!hideToolbox) {
+            const googToolBox = GoogToolBox.createToolBox(udid, player, this, moreBox);
+            this.controlButtons = googToolBox.getHolderElement();
+
+            // Show control buttons or placeholder based on testExecution mode
+            if (!this.params.testExecution) {
+                // Normal mode: show actual controls
+                deviceView.appendChild(this.controlButtons);
+            } else {
+                // Test execution mode: show placeholder of same size
+                const placeholder = document.createElement('div');
+                placeholder.className = 'test-execution-placeholder';
+                deviceView.appendChild(placeholder);
+            }
         }
+
+        // Always enable host keyboard capture so physical keyboard input
+        // reaches the device — regardless of whether the toolbox is shown.
+        this.setHandleKeyboardEvents(true);
 
         const video = document.createElement('div');
         video.className = 'video';
@@ -407,7 +418,11 @@ export class StreamClientScrcpy
 
         video.appendChild(phoneContainer);
         deviceView.appendChild(video);
-        deviceView.appendChild(moreBox);
+
+        // Only show the moreBox settings panel when toolbar is visible
+        if (!hideToolbox) {
+            deviceView.appendChild(moreBox);
+        }
 
         // Set the phone container on player for zoom support
         player.setPhoneContainer(phoneContainer);
@@ -415,6 +430,11 @@ export class StreamClientScrcpy
         player.pause();
 
         document.body.appendChild(deviceView);
+
+        // When running inside an iframe, clicking the stream area must focus the
+        // iframe window so that keyboard events reach document.body listeners.
+        deviceView.addEventListener('mousedown', () => window.focus());
+        deviceView.addEventListener('touchstart', () => window.focus());
 
         // Compute phone-container dimensions using reOrientScreen
         // (defaults to 1080×1920 when no screenInfo yet).
@@ -469,12 +489,11 @@ export class StreamClientScrcpy
         }
     }
 
-    public setHandleKeyboardEvents(enabled: boolean): void {
-        if (enabled) {
-            KeyInputHandler.addEventListener(this);
-        } else {
-            KeyInputHandler.removeEventListener(this);
-        }
+    public setHandleKeyboardEvents(_enabled?: boolean): void {
+        // Always keep keyboard capture active — host keyboard input should
+        // always reach the device. The parameter is kept for API compat but
+        // disable requests are intentionally ignored.
+        KeyInputHandler.addEventListener(this);
     }
 
     public onKeyEvent(event: KeyCodeControlMessage): void {

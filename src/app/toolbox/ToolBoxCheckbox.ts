@@ -11,13 +11,16 @@ export class ToolBoxCheckbox extends ToolBoxElement<HTMLInputElement> {
     private readonly label: HTMLLabelElement;
     private readonly imageOn?: Element;
     private readonly imageOff: Element;
-    constructor(title: string, icons: Icons | Icon, opt_id?: string, optional?: Optional) {
+    constructor(title: string, icons: Icons | Icon, opt_id?: string, optional?: Optional, labelText?: string) {
         super(title, optional);
         const input = document.createElement('input');
         input.type = 'checkbox';
         const label = document.createElement('label');
         label.title = title;
         label.classList.add('control-button');
+        if (labelText !== undefined) {
+            label.classList.add('control-button--labeled');
+        }
         let iconOff: Icon;
         let iconOn: Icon | undefined;
         if (typeof icons !== 'number') {
@@ -34,6 +37,12 @@ export class ToolBoxCheckbox extends ToolBoxElement<HTMLInputElement> {
             this.imageOn.classList.add('image', 'image-on');
             label.appendChild(this.imageOn);
             input.classList.add('two-images');
+        }
+        if (labelText !== undefined) {
+            const textEl = document.createElement('span');
+            textEl.className = 'control-button-label';
+            textEl.textContent = labelText;
+            label.appendChild(textEl);
         }
         const id = opt_id || title.toLowerCase().replace(' ', '_');
         label.htmlFor = input.id = `input_${id}`;

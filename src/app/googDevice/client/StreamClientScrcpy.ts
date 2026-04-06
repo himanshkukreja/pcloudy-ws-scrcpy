@@ -31,6 +31,7 @@ import { StreamReceiverScrcpy } from './StreamReceiverScrcpy';
 import { ParamsDeviceTracker } from '../../../types/ParamsDeviceTracker';
 import { ScrcpyFilePushStream } from '../filePush/ScrcpyFilePushStream';
 import { AudioPlayer } from '../../player/AudioPlayer';
+import { PhoneDragResize } from '../PhoneDragResize';
 
 type StartParams = {
     udid: string;
@@ -61,6 +62,7 @@ export class StreamClientScrcpy
     private audioPlayer?: AudioPlayer;
     private filePushHandler?: FilePushHandler;
     private fitToScreen?: boolean;
+    private phoneDragResize?: PhoneDragResize;
     private readonly streamReceiver: StreamReceiverScrcpy;
 
     public static registerPlayer(playerClass: PlayerClass): void {
@@ -323,6 +325,8 @@ export class StreamClientScrcpy
         this.filePushHandler = undefined;
         this.touchHandler?.release();
         this.touchHandler = undefined;
+        this.phoneDragResize?.destroy();
+        this.phoneDragResize = undefined;
     };
 
     public startStream({ udid, player, playerName, videoSettings, fitToScreen }: StartParams): void {
@@ -407,6 +411,10 @@ export class StreamClientScrcpy
         const video = document.createElement('div');
         video.className = 'video';
 
+        // Draggable wrapper — lets the user freely reposition/resize the phone frame
+        const phoneWrapper = document.createElement('div');
+        phoneWrapper.className = 'draggable-phone-wrapper';
+
         // Create phone container for zoom/transform support
         const phoneContainer = document.createElement('div');
         phoneContainer.className = 'phone-container';
@@ -416,8 +424,11 @@ export class StreamClientScrcpy
         const loadingOverlay = this.createLoadingOverlay();
         phoneContainer.appendChild(loadingOverlay);
 
-        video.appendChild(phoneContainer);
+        phoneWrapper.appendChild(phoneContainer);
+        video.appendChild(phoneWrapper);
         deviceView.appendChild(video);
+
+        // PhoneDragResize is disabled — phone is statically centred in the video area
 
         // Only show the moreBox settings panel when toolbar is visible
         if (!hideToolbox) {
@@ -514,6 +525,19 @@ export class StreamClientScrcpy
     }
 
     public getMaxSize(): Size | undefined {
+        // When draggable phone frame is active, use the wrapper's own dimensions
+        // so the video fills its container correctly after a user resize.
+        const wrapper = this.phoneDragResize
+            ? (document.querySelector('.draggable-phone-wrapper') as HTMLElement | null)
+            : null;
+        if (wrapper) {
+            const width = wrapper.clientWidth & ~15;
+            const height = wrapper.clientHeight & ~15;
+            if (width > 0 && height > 0) {
+                return new Size(width, height);
+            }
+        }
+        // Fallback: use body minus toolbar width
         if (!this.controlButtons) {
             return;
         }

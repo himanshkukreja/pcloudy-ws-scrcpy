@@ -1,5 +1,11 @@
 import { ToolBoxElement } from './ToolBoxElement';
 
+const STORAGE_COLLAPSED_KEY = 'pcloudy-toolbox-collapsed';
+const STORAGE_POS_KEY = 'pcloudy-toolbox-pos';
+
+/** Viewport width below which the toolbar auto-collapses to icon-strip mode */
+const COMPACT_THRESHOLD = 520;
+
 export class ToolBox {
     private readonly holder: HTMLElement;
     private readonly contentWrapper: HTMLElement;
@@ -8,50 +14,121 @@ export class ToolBox {
     private dragOffsetX = 0;
     private dragOffsetY = 0;
     private isCollapsed = false;
+    private autoCollapsed = false;
 
     constructor(list: ToolBoxElement<any>[]) {
         this.holder = document.createElement('div');
         this.holder.classList.add('control-buttons-list', 'control-wrapper');
 
-        // Create toggle button for collapse/expand
-        this.toggleButton = document.createElement('button');
-        this.toggleButton.classList.add('toolbox-toggle');
-        this.toggleButton.innerHTML = this.getToggleIcon(false);
-        this.toggleButton.title = 'Collapse toolbar';
-        this.toggleButton.addEventListener('click', this.onToggle);
-        this.holder.appendChild(this.toggleButton);
+        // ── Header: "Quick Actions" title + chevron arrow ────────────────────────
+        const header = document.createElement('div');
+        header.className = 'toolbox-header';
 
-        // Create content wrapper for the actual tools
+        const title = document.createElement('span');
+        title.className = 'toolbox-title';
+        title.textContent = 'Quick Actions';
+        header.appendChild(title);
+
+        this.toggleButton = document.createElement('button');
+        this.toggleButton.className = 'toolbox-toggle';
+        this.toggleButton.innerHTML = this.chevron(false);
+        this.toggleButton.title = 'Collapse';
+        this.toggleButton.addEventListener('click', this.onToggle);
+        header.appendChild(this.toggleButton);
+
+        this.holder.appendChild(header);
+
+        // ── Content ──────────────────────────────────────────────────────────────
         this.contentWrapper = document.createElement('div');
-        this.contentWrapper.classList.add('toolbox-content');
+        this.contentWrapper.className = 'toolbox-content';
         list.forEach((item) => {
-            item.getAllElements().forEach((el) => {
-                this.contentWrapper.appendChild(el);
-            });
+            item.getAllElements().forEach((el) => this.contentWrapper.appendChild(el));
         });
         this.holder.appendChild(this.contentWrapper);
 
-        // Initialize drag functionality
+        this.restoreState();
         this.initDrag();
+        this.checkResponsive();
+        window.addEventListener('resize', this.onWindowResize);
     }
 
-    private getToggleIcon(collapsed: boolean): string {
-        if (collapsed) {
-            // Expand icon (chevron down / plus)
-            return '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>';
-        } else {
-            // Collapse icon (chevron up / minus)
-            return '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M19 13H5v-2h14v2z"/></svg>';
+    // ── Responsive ───────────────────────────────────────────────────────────────
+
+    private checkResponsive(): void {
+        const narrow = window.innerWidth < COMPACT_THRESHOLD;
+        this.holder.classList.toggle('compact', narrow);
+        if (narrow && !this.isCollapsed) {
+            this.autoCollapsed = true;
+            this.applyCollapsed(true, false);
+        } else if (!narrow && this.autoCollapsed) {
+            this.autoCollapsed = false;
+            this.applyCollapsed(false, false);
         }
+    }
+
+    private onWindowResize = (): void => {
+        this.checkResponsive();
+        // Clamp position within visible viewport bounds after resize
+        const rect = this.holder.getBoundingClientRect();
+        const cx = Math.max(0, Math.min(rect.left, window.innerWidth - rect.width));
+        const cy = Math.max(0, Math.min(rect.top, window.innerHeight - rect.height));
+        if (cx !== rect.left || cy !== rect.top) {
+            this.holder.style.left = `${cx}px`;
+            this.holder.style.top = `${cy}px`;
+            this.holder.style.transform = 'none';
+        }
+    };
+
+    // ── Collapse helpers ─────────────────────────────────────────────────────────
+
+    private applyCollapsed(collapsed: boolean, save = true): void {
+        this.isCollapsed = collapsed;
+        this.holder.classList.toggle('collapsed', collapsed);
+        this.toggleButton.innerHTML = this.chevron(collapsed);
+        this.toggleButton.title = collapsed ? 'Expand' : 'Collapse';
+        if (save) this.saveCollapsedState();
     }
 
     private onToggle = (e: MouseEvent): void => {
         e.stopPropagation();
-        this.isCollapsed = !this.isCollapsed;
-        this.holder.classList.toggle('collapsed', this.isCollapsed);
-        this.toggleButton.innerHTML = this.getToggleIcon(this.isCollapsed);
-        this.toggleButton.title = this.isCollapsed ? 'Expand toolbar' : 'Collapse toolbar';
+        this.autoCollapsed = false; // user explicitly toggled — clear auto flag
+        this.applyCollapsed(!this.isCollapsed);
     };
+
+    private chevron(collapsed: boolean): string {
+        const pts = collapsed ? '9 18 15 12 9 6' : '15 18 9 12 15 6';
+        return `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="${pts}"/></svg>`;
+    }
+
+    // ── Persistence ──────────────────────────────────────────────────────────────
+
+    private restoreState(): void {
+        try {
+            if (localStorage.getItem(STORAGE_COLLAPSED_KEY) === 'true') {
+                this.applyCollapsed(true, false);
+            }
+        } catch (_) { /* localStorage may be unavailable in some iframe contexts */ }
+
+        try {
+            const saved = localStorage.getItem(STORAGE_POS_KEY);
+            if (saved) {
+                const { x, y } = JSON.parse(saved) as { x: number; y: number };
+                this.holder.style.left = `${x}px`;
+                this.holder.style.top = `${y}px`;
+                this.holder.style.transform = 'none';
+            }
+        } catch (_) { /* ignore parse errors */ }
+    }
+
+    private saveCollapsedState(): void {
+        try { localStorage.setItem(STORAGE_COLLAPSED_KEY, String(this.isCollapsed)); } catch (_) { /* ignore */ }
+    }
+
+    private savePosition(x: number, y: number): void {
+        try { localStorage.setItem(STORAGE_POS_KEY, JSON.stringify({ x, y })); } catch (_) { /* ignore */ }
+    }
+
+    // ── Drag ─────────────────────────────────────────────────────────────────────
 
     private initDrag(): void {
         this.holder.addEventListener('mousedown', this.onDragStart);
@@ -59,78 +136,51 @@ export class ToolBox {
     }
 
     private onDragStart = (e: MouseEvent): void => {
-        // Only start drag if clicking on the toolbar itself or the drag handle area
-        // Don't drag when clicking on buttons or the toggle button
         const target = e.target as HTMLElement;
-        if (target.classList.contains('control-button') || target.closest('.control-button') ||
-            target.classList.contains('toolbox-toggle') || target.closest('.toolbox-toggle')) {
-            return;
-        }
-
+        if (target.closest('.control-button') || target.closest('.toolbox-toggle') || target.tagName === 'INPUT') return;
         e.preventDefault();
         this.isDragging = true;
         this.holder.classList.add('dragging');
-
         const rect = this.holder.getBoundingClientRect();
         this.dragOffsetX = e.clientX - rect.left;
         this.dragOffsetY = e.clientY - rect.top;
-
         document.addEventListener('mousemove', this.onDragMove);
         document.addEventListener('mouseup', this.onDragEnd);
     };
 
     private onTouchStart = (e: TouchEvent): void => {
         const target = e.target as HTMLElement;
-        if (target.classList.contains('control-button') || target.closest('.control-button') ||
-            target.classList.contains('toolbox-toggle') || target.closest('.toolbox-toggle')) {
-            return;
-        }
-
-        if (e.touches.length === 1) {
-            e.preventDefault();
-            this.isDragging = true;
-            this.holder.classList.add('dragging');
-
-            const touch = e.touches[0];
-            const rect = this.holder.getBoundingClientRect();
-            this.dragOffsetX = touch.clientX - rect.left;
-            this.dragOffsetY = touch.clientY - rect.top;
-
-            document.addEventListener('touchmove', this.onTouchMove, { passive: false });
-            document.addEventListener('touchend', this.onTouchEnd);
-        }
+        if (target.closest('.control-button') || target.closest('.toolbox-toggle') || target.tagName === 'INPUT') return;
+        if (e.touches.length !== 1) return;
+        e.preventDefault();
+        this.isDragging = true;
+        this.holder.classList.add('dragging');
+        const rect = this.holder.getBoundingClientRect();
+        this.dragOffsetX = e.touches[0].clientX - rect.left;
+        this.dragOffsetY = e.touches[0].clientY - rect.top;
+        document.addEventListener('touchmove', this.onTouchMove, { passive: false });
+        document.addEventListener('touchend', this.onTouchEnd);
     };
 
     private onDragMove = (e: MouseEvent): void => {
         if (!this.isDragging) return;
-
-        const x = e.clientX - this.dragOffsetX;
-        const y = e.clientY - this.dragOffsetY;
-        this.setPosition(x, y);
+        this.setPosition(e.clientX - this.dragOffsetX, e.clientY - this.dragOffsetY);
     };
 
     private onTouchMove = (e: TouchEvent): void => {
         if (!this.isDragging || e.touches.length !== 1) return;
-
         e.preventDefault();
-        const touch = e.touches[0];
-        const x = touch.clientX - this.dragOffsetX;
-        const y = touch.clientY - this.dragOffsetY;
-        this.setPosition(x, y);
+        this.setPosition(e.touches[0].clientX - this.dragOffsetX, e.touches[0].clientY - this.dragOffsetY);
     };
 
     private setPosition(x: number, y: number): void {
-        // Constrain to viewport
         const rect = this.holder.getBoundingClientRect();
-        const maxX = window.innerWidth - rect.width;
-        const maxY = window.innerHeight - rect.height;
-
-        x = Math.max(0, Math.min(x, maxX));
-        y = Math.max(0, Math.min(y, maxY));
-
+        x = Math.max(0, Math.min(x, window.innerWidth - rect.width));
+        y = Math.max(0, Math.min(y, window.innerHeight - rect.height));
         this.holder.style.left = `${x}px`;
         this.holder.style.top = `${y}px`;
-        this.holder.style.transform = 'none'; // Remove the translateY(-50%)
+        this.holder.style.transform = 'none';
+        this.savePosition(x, y);
     }
 
     private onDragEnd = (): void => {
@@ -147,9 +197,9 @@ export class ToolBox {
         document.removeEventListener('touchend', this.onTouchEnd);
     };
 
-    public getHolderElement(): HTMLElement {
-        return this.holder;
-    }
+    // ── Public API ───────────────────────────────────────────────────────────────
+
+    public getHolderElement(): HTMLElement { return this.holder; }
 
     public destroy(): void {
         this.toggleButton.removeEventListener('click', this.onToggle);
@@ -159,5 +209,6 @@ export class ToolBox {
         document.removeEventListener('mouseup', this.onDragEnd);
         document.removeEventListener('touchmove', this.onTouchMove);
         document.removeEventListener('touchend', this.onTouchEnd);
+        window.removeEventListener('resize', this.onWindowResize);
     }
 }

@@ -4,43 +4,52 @@ import SvgImage from '../../ui/SvgImage';
 import { KeyCodeControlMessage } from '../../controlMessage/KeyCodeControlMessage';
 import { ToolBoxButton } from '../../toolbox/ToolBoxButton';
 import { ToolBoxElement } from '../../toolbox/ToolBoxElement';
-import { ToolBoxCheckbox } from '../../toolbox/ToolBoxCheckbox';
 import { StreamClientScrcpy } from '../client/StreamClientScrcpy';
 import { BasePlayer } from '../../player/BasePlayer';
 import { TVRemote } from './TVRemote';
 
-const BUTTONS = [
-    {
-        title: 'Power',
-        code: KeyEvent.KEYCODE_POWER,
-        icon: SvgImage.Icon.POWER,
-    },
-    {
-        title: 'Volume up',
-        code: KeyEvent.KEYCODE_VOLUME_UP,
-        icon: SvgImage.Icon.VOLUME_UP,
-    },
-    {
-        title: 'Volume down',
-        code: KeyEvent.KEYCODE_VOLUME_DOWN,
-        icon: SvgImage.Icon.VOLUME_DOWN,
-    },
-    {
-        title: 'Back',
-        code: KeyEvent.KEYCODE_BACK,
-        icon: SvgImage.Icon.BACK,
-    },
-    {
-        title: 'Home',
-        code: KeyEvent.KEYCODE_HOME,
-        icon: SvgImage.Icon.HOME,
-    },
-    {
-        title: 'Overview',
-        code: KeyEvent.KEYCODE_APP_SWITCH,
-        icon: SvgImage.Icon.OVERVIEW,
-    },
+// Navigation keys — sent as KeyCodeControlMessage via WebSocket (zero latency)
+const NAV_BUTTONS = [
+    { title: 'Back',     label: 'Back',     code: KeyEvent.KEYCODE_BACK,       icon: SvgImage.Icon.BACK },
+    { title: 'Home',     label: 'Home',     code: KeyEvent.KEYCODE_HOME,       icon: SvgImage.Icon.HOME },
+    { title: 'Overview', label: 'Apps',     code: KeyEvent.KEYCODE_APP_SWITCH, icon: SvgImage.Icon.OVERVIEW },
+    { title: 'Menu',     label: 'Menu',     code: KeyEvent.KEYCODE_MENU,       icon: SvgImage.Icon.MENU },
 ];
+
+// System / volume keys
+const SYSTEM_BUTTONS = [
+    { title: 'Power',       label: 'Power',    code: KeyEvent.KEYCODE_POWER,        icon: SvgImage.Icon.POWER },
+    { title: 'Volume up',   label: 'Vol +',    code: KeyEvent.KEYCODE_VOLUME_UP,    icon: SvgImage.Icon.VOLUME_UP },
+    { title: 'Volume down', label: 'Vol -',    code: KeyEvent.KEYCODE_VOLUME_DOWN,  icon: SvgImage.Icon.VOLUME_DOWN },
+    { title: 'Mute',        label: 'Mute',     code: KeyEvent.KEYCODE_VOLUME_MUTE,  icon: SvgImage.Icon.MUTE_KEY },
+    { title: 'Notifications', label: 'Notifs', code: KeyEvent.KEYCODE_NOTIFICATION, icon: SvgImage.Icon.NOTIFICATIONS },
+];
+
+/** Creates a thin visual divider between button groups */
+function makeDivider(): HTMLElement {
+    const el = document.createElement('div');
+    el.className = 'toolbox-divider';
+    return el;
+}
+
+/** Creates a small section heading */
+function makeSectionHeader(text: string): HTMLElement {
+    const el = document.createElement('div');
+    el.className = 'toolbox-section-header';
+    el.textContent = text;
+    return el;
+}
+
+/** Wraps a raw HTMLElement as a minimal ToolBoxElement so ToolBox can accept it */
+class RawElement extends ToolBoxElement<HTMLElement> {
+    private readonly el: HTMLElement;
+    constructor(el: HTMLElement) {
+        super('', undefined);
+        this.el = el;
+    }
+    public getElement(): HTMLElement { return this.el; }
+    public getAllElements(): HTMLElement[] { return [this.el]; }
+}
 
 export class GoogToolBox extends ToolBox {
     public tvRemote?: TVRemote;
@@ -50,96 +59,45 @@ export class GoogToolBox extends ToolBox {
     }
 
     public static createToolBox(
-        udid: string,
-        player: BasePlayer,
+        _udid: string,
+        _player: BasePlayer,
         client: StreamClientScrcpy,
-        moreBox?: HTMLElement,
+        _moreBox?: HTMLElement,
     ): GoogToolBox {
-        const playerName = player.getName();
-        const list = BUTTONS.slice();
+        const elements: ToolBoxElement<any>[] = [];
+
+        // --- Key handler (mousedown/mouseup → KeyCodeControlMessage over WebSocket) ---
         const handler = <K extends keyof HTMLElementEventMap, T extends HTMLElement>(
             type: K,
             element: ToolBoxElement<T>,
         ) => {
-            if (!element.optional?.code) {
-                return;
-            }
+            if (!element.optional?.code) return;
             const { code } = element.optional;
             const action = type === 'mousedown' ? KeyEvent.ACTION_DOWN : KeyEvent.ACTION_UP;
             const event = new KeyCodeControlMessage(action, code, 0, 0);
             client.sendMessage(event);
         };
-        const elements: ToolBoxElement<any>[] = list.map((item) => {
-            const button = new ToolBoxButton(item.title, item.icon, {
-                code: item.code,
-            });
+
+        // ── Section: Navigation ──────────────────────────────────────────────────
+        elements.push(new RawElement(makeSectionHeader('Navigation')));
+        NAV_BUTTONS.forEach((item) => {
+            const button = new ToolBoxButton(item.title, item.icon, { code: item.code }, item.label);
             button.addEventListener('mousedown', handler);
             button.addEventListener('mouseup', handler);
-            return button;
+            elements.push(button);
         });
-        if (player.supportsScreenshot) {
-            const screenshot = new ToolBoxButton('Take screenshot', SvgImage.Icon.CAMERA);
-            screenshot.addEventListener('click', () => {
-                player.createScreenshot(client.getDeviceName());
-            });
-            elements.push(screenshot);
-        }
 
-        // Zoom controls
-        const zoomIn = new ToolBoxButton('Zoom in', SvgImage.Icon.ZOOM_IN);
-        zoomIn.addEventListener('click', () => {
-            player.zoomIn();
+        // ── Divider ──────────────────────────────────────────────────────────────
+        elements.push(new RawElement(makeDivider()));
+
+        // ── Section: System ──────────────────────────────────────────────────────
+        elements.push(new RawElement(makeSectionHeader('System')));
+        SYSTEM_BUTTONS.forEach((item) => {
+            const button = new ToolBoxButton(item.title, item.icon, { code: item.code }, item.label);
+            button.addEventListener('mousedown', handler);
+            button.addEventListener('mouseup', handler);
+            elements.push(button);
         });
-        elements.push(zoomIn);
-
-        const zoomOut = new ToolBoxButton('Zoom out', SvgImage.Icon.ZOOM_OUT);
-        zoomOut.addEventListener('click', () => {
-            player.zoomOut();
-        });
-        elements.push(zoomOut);
-
-        const zoomReset = new ToolBoxButton('Reset zoom', SvgImage.Icon.ZOOM_RESET);
-        zoomReset.addEventListener('click', () => {
-            player.resetZoom();
-        });
-        elements.push(zoomReset);
-
-        // Audio mute/unmute toggle
-        const muteToggle = new ToolBoxCheckbox(
-            'Toggle audio',
-            { on: SvgImage.Icon.VOLUME_ON, off: SvgImage.Icon.VOLUME_OFF },
-            `mute_audio_${udid}_${playerName}`,
-        );
-        muteToggle.getElement().checked = true; // checked = audio on (unmuted)
-        muteToggle.addEventListener('click', (_, el) => {
-            const element = el.getElement();
-            client.setMuted(!element.checked);
-        });
-        elements.push(muteToggle);
-
-        const keyboard = new ToolBoxCheckbox(
-            'Capture keyboard',
-            SvgImage.Icon.KEYBOARD,
-            `capture_keyboard_${udid}_${playerName}`,
-        );
-        keyboard.addEventListener('click', (_, el) => {
-            const element = el.getElement();
-            client.setHandleKeyboardEvents(element.checked);
-        });
-        keyboard.getElement().checked = true;
-        client.setHandleKeyboardEvents(true);
-        elements.push(keyboard);
-
-        if (moreBox) {
-            const displayId = player.getVideoSettings().displayId;
-            const id = `show_more_${udid}_${playerName}_${displayId}`;
-            const more = new ToolBoxCheckbox('More', SvgImage.Icon.MORE, id);
-            more.addEventListener('click', (_, el) => {
-                const element = el.getElement();
-                moreBox.style.display = element.checked ? 'block' : 'none';
-            });
-            // elements.unshift(more);
-        }
 
         // Android TV: add a remote control toggle button
         const params = new URLSearchParams(window.location.search);
@@ -147,7 +105,7 @@ export class GoogToolBox extends ToolBox {
         let tvRemote: TVRemote | undefined;
         if (isAndroidTV) {
             tvRemote = new TVRemote(client);
-            const remoteBtn = new ToolBoxButton('TV Remote', SvgImage.Icon.TV_REMOTE);
+            const remoteBtn = new ToolBoxButton('TV Remote', SvgImage.Icon.TV_REMOTE, undefined, 'TV Remote');
             remoteBtn.addEventListener('click', () => {
                 tvRemote!.toggle();
             });

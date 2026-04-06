@@ -5,15 +5,15 @@
     --text-shadow-color: hsl(218, 67%, 95%);
     --header-bg-color: hsl(0, 0%, 95%);
     --controls-bg-color: hsla(0, 0%, 95%, 0.8);
-    --control-buttons-bg-color: hsl(0, 0%, 95%);
+    --control-buttons-bg-color: #ffffff;
     --text-color: hsl(210, 16%, 22%);
     --text-color-light: hsl(200, 16%, 52%);
     --link-color: hsl(218, 85%, 43%);
     --link-color-light: hsl(218, 85%, 73%);
     --link-color_visited: hsl(271, 68%, 32%);
     --link-color_visited-light: hsl(271, 68%, 72%);
-    --svg-checkbox-bg-color: hsl(172, 100%, 37%);
-    --svg-button-fill: hsl(199, 17%, 46%);
+    --svg-checkbox-bg-color: #1a7fe8;
+    --svg-button-fill: #4b5563;
     --kill-button-hover-color: hsl(342, 100%, 37%);
     --url-color: hsl(0, 0%, 60%);
     --button-text-color: hsl(214, 82%, 51%);
@@ -38,8 +38,8 @@
         --link-color-light: hsl(218, 63%, 50%);
         --link-color_visited: hsl(267, 31%, 47%);
         --link-color_visited-light: hsl(267, 31%, 27%);
-        --svg-checkbox-bg-color: hsl(172, 100%, 27%);
-        --svg-button-fill: hsl(0, 0%, 100%);
+        --svg-checkbox-bg-color: #1a7fe8;
+        --svg-button-fill: hsl(0, 0%, 90%);
         --kill-button-hover-color: hsl(342, 100%, 27%);
         --url-color: hsl(0, 0%, 60%);
         --device-list-stripe-color: hsl(0, 0%, 16%);
@@ -312,65 +312,129 @@ body.stream {
     z-index: 10;
 }
 
+/* ==================== FLOATING QUICK ACTIONS TOOLBOX ==================== */
+
 .control-buttons-list {
-    /* Floating draggable toolbar */
     position: fixed;
     top: 50%;
     left: 16px;
     transform: translateY(-50%);
-    z-index: 10000; /* Above everything including phone */
-    width: 2.5rem;
-    background-color: var(--control-buttons-bg-color);
-    padding: 0.5rem 0.25rem;
-    border-radius: 0.75rem;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    cursor: move;
+    z-index: 10000;
+    width: 10.5rem;
+    background: #ffffff;
+    color: #1f2937;
+    border-radius: 1rem;
+    border: 1px solid rgba(0, 0, 0, 0.09);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07), 0 8px 32px rgba(0, 0, 0, 0.11);
     user-select: none;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    gap: 0.25rem;
+    font-family: Inter, system-ui, -apple-system, sans-serif;
+    color-scheme: light;
+    overflow: hidden;
+    cursor: default;
+    transition: box-shadow 0.2s ease;
 }
 
 .control-buttons-list:hover {
-    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06), 0 8px 28px rgba(0, 0, 0, 0.11);
 }
 
 .control-buttons-list.dragging {
     opacity: 0.9;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    cursor: grabbing;
 }
 
-/* Drag handle indicator */
-.control-buttons-list::before {
-    content: '';
-    width: 1.5rem;
-    height: 4px;
-    background: var(--text-color-light);
-    border-radius: 2px;
+/* Drag handle at the top */
+.toolbox-drag-handle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 1.2rem;
+    cursor: grab;
     opacity: 0.4;
-    margin-bottom: 0.25rem;
+    color: var(--text-color-light);
+    transition: opacity 0.15s ease;
+    margin-bottom: 0.1rem;
 }
 
+.toolbox-drag-handle:hover {
+    opacity: 0.7;
+}
+
+/* Section headers */
+.toolbox-section-header {
+    font-size: 0.6rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #9ca3af;
+    padding: 0.55rem 0.65rem 0.2rem;
+    font-family: Inter, system-ui, -apple-system, sans-serif;
+}
+
+/* Section dividers */
+.toolbox-divider {
+    height: 1px;
+    background: rgba(0, 0, 0, 0.06);
+    margin: 0.3rem 0.5rem;
+}
+
+/* Base button — compact icon-only */
 .control-button {
     padding: 0.25rem;
     width: 2rem;
     height: 2rem;
     border: none;
     border-radius: 0.5rem;
-    opacity: 0.75;
+    opacity: 0.8;
     background-color: transparent;
     cursor: pointer;
     transition: background-color 0.15s ease, opacity 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+/* Labeled button — icon + text side by side, full width */
+.control-button--labeled {
+    width: 100%;
+    height: auto;
+    padding: 0.32rem 0.6rem;
+    border-radius: 0.45rem;
+    justify-content: flex-start;
+    gap: 0.5rem;
+}
+
+.control-button--labeled > svg,
+.control-button--labeled > .image,
+.control-button--labeled > .image-off,
+.control-button--labeled > .image-on {
+    width: 1.1rem;
+    height: 1.1rem;
+    flex-shrink: 0;
+}
+
+.control-button-label {
+    font-size: 0.73rem;
+    font-weight: 500;
+    color: #374151;
+    text-align: left;
+    white-space: nowrap;
+    line-height: 1;
+    font-family: Inter, system-ui, -apple-system, sans-serif;
 }
 
 .control-button:hover {
     opacity: 1;
-    background-color: rgba(0, 0, 0, 0.1);
+    background-color: rgba(26, 127, 232, 0.07);
 }
 
 .control-button:active {
-    background-color: rgba(0, 0, 0, 0.15);
+    background-color: rgba(26, 127, 232, 0.13);
 }
 
 /* Hide checkbox inputs - support both direct children and nested in toolbox-content */
@@ -385,7 +449,7 @@ body.stream {
 }
 
 .control-button > svg {
-    fill: var(--svg-button-fill);
+    fill: #4b5563;
 }
 
 /* Two-image checkbox states */
@@ -405,42 +469,71 @@ body.stream {
     display: block;
 }
 
-/* Active state - teal/cyan color when checked */
+/* Active state — pcloudy blue when checked */
 .control-wrapper input[type=checkbox]:checked + label > svg {
-    fill: var(--svg-checkbox-bg-color);
+    fill: #1a7fe8;
+}
+
+/* Checked label gets pcloudy blue text */
+.control-wrapper input[type=checkbox]:checked + label .control-button-label {
+    color: #1a7fe8;
 }
 
 /* Toolbox toggle button */
 .toolbox-toggle {
-    width: 2rem;
-    height: 1.5rem;
+    width: 100%;
+    height: 1.6rem;
     border: none;
-    border-radius: 0.375rem;
+    border-radius: 0.5rem;
     background-color: transparent;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    opacity: 0.6;
+    gap: 0.3rem;
+    opacity: 0.7;
     transition: opacity 0.15s ease, background-color 0.15s ease;
-    color: var(--svg-button-fill);
-    margin-bottom: 0.25rem;
+    color: #6b7280;
+    margin-bottom: 0.2rem;
+    font-size: 0.65rem;
+    font-weight: 500;
+    letter-spacing: 0.03em;
+    font-family: Inter, system-ui, -apple-system, sans-serif;
+}
+
+.toolbox-toggle::after {
+    content: 'Collapse';
+    font-size: 0.63rem;
+    font-weight: 500;
+    color: #9ca3af;
+    letter-spacing: 0.03em;
+}
+
+.control-buttons-list.collapsed .toolbox-toggle::after {
+    content: 'Expand';
 }
 
 .toolbox-toggle:hover {
     opacity: 1;
-    background-color: rgba(0, 0, 0, 0.1);
+    background-color: rgba(26, 127, 232, 0.07);
+    color: #1a7fe8;
 }
 
 /* Toolbox content wrapper */
 .toolbox-content {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    gap: 0.25rem;
-    overflow: hidden;
-    max-height: 500px;
+    align-items: stretch;
+    gap: 0.05rem;
+    overflow-y: auto;
+    overflow-x: hidden;
+    max-height: calc(100vh - 5rem);
     transition: max-height 0.3s ease, opacity 0.2s ease;
+    /* Hide scrollbar but keep scrollability */
+    scrollbar-width: none;
+}
+.toolbox-content::-webkit-scrollbar {
+    display: none;
 }
 
 /* Collapsed state */
@@ -451,19 +544,62 @@ body.stream {
 }
 
 .control-buttons-list.collapsed {
-    padding: 0.25rem;
+    width: 6.5rem;
+    padding: 0.4rem 0.35rem;
 }
 
-/* Show drag handle below toggle button when collapsed */
-.control-buttons-list.collapsed::before {
-    order: 1; /* Move after the toggle button */
-    margin-bottom: 0;
-    margin-top: 0.25rem;
+@media (prefers-color-scheme: dark) {
+    /* Toolbox always uses light theme — explicitly keep light colors in dark OS mode */
+    .control-buttons-list {
+        background: #ffffff;
+        border-color: rgba(0, 0, 0, 0.07);
+        color: #374151;
+    }
+    .control-buttons-list .toolbox-section-header {
+        color: #9ca3af;
+    }
+    .control-buttons-list .control-button > svg {
+        fill: #4b5563;
+    }
+    .control-buttons-list .control-button-label {
+        color: #374151;
+    }
+    .control-buttons-list .toolbox-toggle {
+        color: #6b7280;
+    }
+    .control-buttons-list .toolbox-drag-handle {
+        color: #9ca3af;
+    }
+    .control-buttons-list .toolbox-divider {
+        background: rgba(0, 0, 0, 0.06);
+    }
+    .control-buttons-list.collapsed {
+        border-color: rgba(0, 0, 0, 0.07);
+    }
+}
+
+@media (max-width: 380px) {
+    .control-buttons-list {
+        width: 8.5rem;
+        left: 8px;
+        padding: 0.4rem 0.3rem 0.5rem;
+    }
+    .control-button--labeled {
+        padding: 0.28rem 0.45rem;
+        gap: 0.4rem;
+    }
+    .control-button-label {
+        font-size: 0.68rem;
+    }
+    .toolbox-section-header {
+        font-size: 0.55rem;
+        padding: 0.45rem 0.5rem 0.15rem;
+    }
 }
 
 /* ==================== BOTTOM TOOLBAR (TV / landscape phone on desktop) ==================== */
 
-/* Applied via JS when isAndroidTV || rotation — mirrors the mobile bottom bar style */
+/* Applied via JS when isAndroidTV — horizontal layout at bottom */
 .control-buttons-list.bottom-toolbar {
     width: auto;
     height: auto;
@@ -474,19 +610,39 @@ body.stream {
     bottom: 0;
     transform: translateX(-50%);
     flex-direction: row;
-    cursor: move; /* Still draggable on desktop */
     border-radius: 1rem 1rem 0 0;
     gap: 0.15rem;
+    align-items: center;
+}
+
+.control-buttons-list.bottom-toolbar .toolbox-drag-handle {
+    display: none;
+}
+
+.control-buttons-list.bottom-toolbar .toolbox-section-header {
+    display: none;
+}
+
+.control-buttons-list.bottom-toolbar .toolbox-divider {
+    width: 1px;
+    height: 1.5rem;
+    margin: 0 0.2rem;
 }
 
 .control-buttons-list.bottom-toolbar .toolbox-content {
     flex-direction: row;
     max-height: none;
+    max-width: none;
     gap: 0.15rem;
+    align-items: center;
 }
 
-/* Hide drag handle (vertical) for bottom toolbar */
-.control-buttons-list.bottom-toolbar::before {
+.control-buttons-list.bottom-toolbar .control-button--labeled {
+    width: auto;
+    padding: 0.25rem;
+}
+
+.control-buttons-list.bottom-toolbar .control-button-label {
     display: none;
 }
 
@@ -501,69 +657,6 @@ body.stream {
 
 /* Mobile devices (width < 600px) */
 @media (max-width: 599px) {
-    /* Control panel - thin bar at bottom, horizontal layout */
-    .control-buttons-list {
-        width: auto;
-        height: auto;
-        padding: 0.2rem 0.4rem;
-        left: 50%;
-        right: auto;
-        top: auto;
-        bottom: 0;
-        transform: translateX(-50%);
-        flex-direction: row;
-        cursor: default; /* Not draggable on mobile */
-        border-radius: 1rem 1rem 0 0;
-        gap: 0.1rem;
-    }
-
-    /* Toolbox content horizontal on mobile */
-    .toolbox-content {
-        flex-direction: row;
-        max-height: none;
-        gap: 0.1rem;
-    }
-
-    /* Disable drag indicator on mobile */
-    .control-buttons-list::before {
-        display: none;
-    }
-
-    .control-buttons-list.dragging {
-        cursor: default;
-    }
-
-    /* Thin small buttons on mobile */
-    .control-button {
-        width: 1.35rem;
-        height: 1.35rem;
-        padding: 0.12rem;
-    }
-
-    .control-button > svg {
-        width: 100%;
-        height: 100%;
-    }
-
-    /* Toggle button thin on mobile */
-    .toolbox-toggle {
-        width: 1.2rem;
-        height: 1.2rem;
-        margin-bottom: 0;
-        margin-right: 0.15rem;
-    }
-
-    /* Collapsed state on mobile - horizontal */
-    .control-buttons-list.collapsed {
-        padding: 0.15rem 0.25rem;
-    }
-
-    .control-buttons-list.collapsed .toolbox-content {
-        max-width: 0;
-        max-height: none;
-        opacity: 0;
-    }
-
     /* Phone container - smaller border radius on mobile */
     .phone-container {
         border-radius: 1rem;
@@ -841,34 +934,93 @@ body.stream {
     color: rgba(255,255,255,0.78);
 }
 
-/* Tablet devices (600px - 1023px) */
-@media (min-width: 600px) and (max-width: 1023px) {
-    .control-buttons-list {
-        width: 2.25rem;
-        left: 12px;
-    }
+/* ==================== DRAGGABLE PHONE FRAME ==================== */
 
-    .control-button {
-        width: 1.75rem;
-        height: 1.75rem;
+/* Wrapper div that allows the user to drag/resize the phone video */
+.draggable-phone-wrapper {
+    position: relative;
+    user-select: none;
+    cursor: default;
+}
+
+.draggable-phone-wrapper.is-dragging {
+    cursor: grabbing;
+}
+
+/* Grip bar above the phone — drag zone */
+.phone-grip {
+    width: 100%;
+    height: 1.4rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: grab;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.draggable-phone-wrapper:hover .phone-grip {
+    opacity: 1;
+}
+
+.phone-grip-dots {
+    display: flex;
+    gap: 3px;
+    align-items: center;
+}
+
+.phone-grip-dots span {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.35);
+    display: block;
+}
+
+@media (prefers-color-scheme: dark) {
+    .phone-grip-dots span {
+        background: rgba(255, 255, 255, 0.35);
     }
 }
 
-/* Very small screens (width < 400px) */
-@media (max-width: 399px) {
-    .control-buttons-list {
-        padding: 0.15rem 0.3rem;
-        bottom: 0;
-    }
+/* Resize corner handles */
+.resize-handle {
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    z-index: 100;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
 
-    .control-button {
-        width: 1.15rem;
-        height: 1.15rem;
-        padding: 0.08rem;
-    }
+.draggable-phone-wrapper:hover .resize-handle {
+    opacity: 1;
+}
 
-    .toolbox-toggle {
-        width: 1rem;
-        height: 1rem;
+.resize-handle::after {
+    content: '';
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    border-color: rgba(0, 0, 0, 0.4);
+    border-style: solid;
+    border-width: 0;
+}
+
+@media (prefers-color-scheme: dark) {
+    .resize-handle::after {
+        border-color: rgba(255, 255, 255, 0.45);
     }
 }
+
+.resize-handle--tl { top: 0; left: 0; cursor: nw-resize; }
+.resize-handle--tl::after { top: 3px; left: 3px; border-top-width: 2px; border-left-width: 2px; }
+
+.resize-handle--tr { top: 0; right: 0; cursor: ne-resize; }
+.resize-handle--tr::after { top: 3px; right: 3px; border-top-width: 2px; border-right-width: 2px; }
+
+.resize-handle--bl { bottom: 0; left: 0; cursor: sw-resize; }
+.resize-handle--bl::after { bottom: 3px; left: 3px; border-bottom-width: 2px; border-left-width: 2px; }
+
+.resize-handle--br { bottom: 0; right: 0; cursor: se-resize; }
+.resize-handle--br::after { bottom: 3px; right: 3px; border-bottom-width: 2px; border-right-width: 2px; }

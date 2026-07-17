@@ -28,7 +28,6 @@ export class Device extends TypedEmitter<DeviceEvents> {
     private pidDetectionVariant: PID_DETECTION = PID_DETECTION.UNKNOWN;
     private client: AdbKitClient;
     private properties?: Record<string, string>;
-    private spawnServer = true;
     private updateTimeoutId?: Timeout;
     private updateTimeout = Device.INITIAL_UPDATE_TIMEOUT;
     private updateCount = 0;
@@ -103,6 +102,7 @@ export class Device extends TypedEmitter<DeviceEvents> {
             const args = ['-s', `${this.udid}`, 'shell', command];
             const adb = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] });
             let output = '';
+            let errorOutput = '';
 
             adb.stdout.on('data', (data) => {
                 output += data.toString();
@@ -110,6 +110,7 @@ export class Device extends TypedEmitter<DeviceEvents> {
             });
 
             adb.stderr.on('data', (data) => {
+                errorOutput += data.toString();
                 console.error(this.TAG, `stderr: ${data}`);
             });
 
@@ -118,9 +119,15 @@ export class Device extends TypedEmitter<DeviceEvents> {
                 reject(error);
             });
 
-            adb.on('close', (code) => {
-                console.log(this.TAG, `adb process (${args.join(' ')}) exited with code ${code}`);
-                resolve(output);
+            adb.on('close', (code, signal) => {
+                const exitLabel = signal ? `signal ${signal}` : `code ${code}`;
+                console.log(this.TAG, `adb process (${args.join(' ')}) exited with ${exitLabel}`);
+                if (code === 0) {
+                    resolve(output);
+                    return;
+                }
+                const details = [output.trim(), errorOutput.trim()].filter(Boolean).join('\n');
+                reject(new Error(`adb shell exited with ${exitLabel}${details ? `: ${details}` : ''}`));
             });
         });
     }
@@ -330,15 +337,7 @@ export class Device extends TypedEmitter<DeviceEvents> {
             const netIntPromise = this.updateInterfaces().then((interfaces) => {
                 return !!interfaces.length;
             });
-            let pidPromise: Promise<number | undefined>;
-            if (this.spawnServer) {
-                pidPromise = this.startServer();
-            } else {
-                pidPromise = this.getServerPid();
-            }
-            const serverPromise = pidPromise.then(() => {
-                return !(this.descriptor.pid === -1 && this.spawnServer);
-            });
+            const serverPromise = this.getServerPid().then(() => true);
             Promise.all([propsPromise, netIntPromise, serverPromise])
                 .then((results) => {
                     this.updateTimeoutId = undefined;
@@ -424,7 +423,6 @@ export class Device extends TypedEmitter<DeviceEvents> {
     }
 
     public async killServer(pid: number): Promise<void> {
-        this.spawnServer = false;
         const realPid = await this.getServerPid();
         if (typeof realPid !== 'number') {
             return;
@@ -446,7 +444,6 @@ export class Device extends TypedEmitter<DeviceEvents> {
     }
 
     public async startServer(): Promise<number | undefined> {
-        this.spawnServer = true;
         const pid = await this.getServerPid();
         if (typeof pid === 'number') {
             return pid;

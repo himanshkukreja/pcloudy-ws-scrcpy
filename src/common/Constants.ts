@@ -1,5 +1,5 @@
 export const SERVER_PACKAGE = 'com.genymobile.scrcpy.Server';
-export const SERVER_VERSION = '3.1';
+export const SERVER_VERSION = '3.3.3';
 export const SCRCPY_SOCKET_NAME = 'scrcpy_00000000';
 
 const ARGUMENTS = [

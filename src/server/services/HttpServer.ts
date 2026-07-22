@@ -143,21 +143,23 @@ export class HttpServer extends TypedEmitter<HttpServerEvents> implements Servic
         // Protect the base path
         const rboxServicePort = process.env[EnvName.RBOX_SERVICE_PORT] || '4000';
         const internalSecret = process.env[EnvName.INTERNAL_API_SECRET] || '';
+        const streamTokenValidateUrl = process.env[EnvName.STREAM_TOKEN_VALIDATE_URL] || `http://127.0.0.1:${rboxServicePort}/api/v1/stream/validate`;
         this.mainApp.use(async (req: Request, res: Response, next: NextFunction) => {
             if (req.path === '/') {
                 const token = req.query.token as string | undefined;
                 const udid = req.query.udid as string | undefined;
+                const rid = req.query.rid as string | undefined;
                 if (token && udid) {
-                    // Validate stream session token against rbox token registry
+                    // Validate stream session token against the configured backend.
                     try {
-                        const validateUrl = `http://127.0.0.1:${rboxServicePort}/api/v1/stream/validate?token=${encodeURIComponent(token)}&udid=${encodeURIComponent(udid)}`;
+                        const validateUrl = buildStreamTokenValidateUrl(streamTokenValidateUrl, { token, udid, rid });
                         const validateRes = await fetch(validateUrl, {
                             headers: { 'x-internal-token': internalSecret },
                             signal: AbortSignal.timeout(3000),
                         });
                         if (validateRes.ok) {
-                            const body = await validateRes.json() as { valid: boolean };
-                            if (body.valid) {
+                            const body = await validateRes.json() as { valid?: boolean; data?: { valid?: boolean } };
+                            if (body.valid === true || body.data?.valid === true) {
                                 return next();
                             }
                         }
@@ -252,4 +254,12 @@ export class HttpServer extends TypedEmitter<HttpServerEvents> implements Servic
             item.server.close();
         });
     }
+}
+
+function buildStreamTokenValidateUrl(baseUrl: string, params: { token: string; udid: string; rid?: string }): string {
+    const query = new URLSearchParams({ token: params.token, udid: params.udid });
+    if (params.rid) {
+        query.set('rid', params.rid);
+    }
+    return `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}${query.toString()}`;
 }

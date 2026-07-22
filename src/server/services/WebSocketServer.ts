@@ -35,6 +35,7 @@ export class WebSocketServer implements Service {
         const TAG = `WebSocket Server {tcp:${port}}`;
         const rboxServicePort = process.env[EnvName.RBOX_SERVICE_PORT] || '4000';
         const internalSecret = process.env[EnvName.INTERNAL_API_SECRET] || '';
+        const streamTokenValidateUrl = process.env[EnvName.STREAM_TOKEN_VALIDATE_URL] || `http://127.0.0.1:${rboxServicePort}/api/v1/stream/validate`;
         const wss = new WSServer({ server });
         wss.on('connection', async (ws: WS, request) => {
             if (!request.url) {
@@ -46,17 +47,18 @@ export class WebSocketServer implements Service {
             // Validate stream session token if present in connection URL
             const token = url.searchParams.get('token');
             const udid = url.searchParams.get('udid');
+            const rid = url.searchParams.get('rid') || undefined;
             if (token && udid) {
                 let tokenValid = false;
                 try {
-                    const validateUrl = `http://127.0.0.1:${rboxServicePort}/api/v1/stream/validate?token=${encodeURIComponent(token)}&udid=${encodeURIComponent(udid)}`;
+                    const validateUrl = buildStreamTokenValidateUrl(streamTokenValidateUrl, { token, udid, rid });
                     const validateRes = await fetch(validateUrl, {
                         headers: { 'x-internal-token': internalSecret },
                         signal: AbortSignal.timeout(3000),
                     });
                     if (validateRes.ok) {
-                        const body = await validateRes.json() as { valid: boolean };
-                        tokenValid = body.valid;
+                        const body = await validateRes.json() as { valid?: boolean; data?: { valid?: boolean } };
+                        tokenValid = body.valid === true || body.data?.valid === true;
                     }
                 } catch (e) {
                     console.error(`[${TAG}] Token validation call failed:`, (e as Error).message);
@@ -109,4 +111,13 @@ export class WebSocketServer implements Service {
             server.close();
         });
     }
+}
+
+
+function buildStreamTokenValidateUrl(baseUrl: string, params: { token: string; udid: string; rid?: string }): string {
+    const query = new URLSearchParams({ token: params.token, udid: params.udid });
+    if (params.rid) {
+        query.set('rid', params.rid);
+    }
+    return `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}${query.toString()}`;
 }

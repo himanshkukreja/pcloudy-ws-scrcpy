@@ -25,6 +25,7 @@ type IncomingMessage = {
 const proto = 'http://';
 const fakeHost = '127.0.0.1:6666';
 const fakeHostRe = /127\.0\.0\.1:6666/;
+const ADB_BIN = process.env.ADB_BIN || process.env.ADB_PATH || 'adb';
 
 export class AdbUtils {
     private static async formatStatsMin(entry: Entry): Promise<FileStats> {
@@ -140,7 +141,7 @@ export class AdbUtils {
 
     public static async removeForward(serial: string, local: string): Promise<void> {
         return new Promise((resolve) => {
-            const adb = spawn('adb', ['-s', serial, 'forward', '--remove', local]);
+            const adb = spawn(ADB_BIN, ['-s', serial, 'forward', '--remove', local]);
             adb.on('close', () => resolve());
             adb.on('error', () => resolve());
         });

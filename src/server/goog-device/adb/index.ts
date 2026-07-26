@@ -10,8 +10,9 @@ interface Options {
 
 export class AdbExtended extends Adb {
     static createClient(options: Options = {}): ExtendedClient {
+        const adbBin = options.bin || process.env.ADB_BIN || process.env.ADB_PATH;
         const opts: ClientOptions = {
-            bin: options.bin,
+            bin: adbBin,
             host: options.host || process.env.ADB_HOST || '127.0.0.1',
             port: options.port || 0,
         };

@@ -89,6 +89,7 @@ export abstract class BasePlayer extends TypedEmitter<PlayerEvents> {
     // Zoom state
     private zoomLevel: number = 1.0;
     private phoneContainer?: HTMLElement;
+    private streamReadyNotified = false;
     private readonly MIN_ZOOM = 0.5;
     private readonly MAX_ZOOM = 2.0;
     private readonly ZOOM_STEP = 0.1;
@@ -937,6 +938,11 @@ export abstract class BasePlayer extends TypedEmitter<PlayerEvents> {
     }
 
     public hideLoadingOverlay(): void {
+        if (!this.streamReadyNotified) {
+            this.streamReadyNotified = true;
+            window.parent?.postMessage({ event: 'ws-scrcpy-stream-ready', udid: this.udid }, '*');
+        }
+
         // Hide the video loading overlay when video is ready
         const overlay = document.querySelector('.video-loading-overlay');
         if (overlay) {

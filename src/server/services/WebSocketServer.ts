@@ -53,7 +53,7 @@ export class WebSocketServer implements Service {
                 try {
                     const validateUrl = buildStreamTokenValidateUrl(streamTokenValidateUrl, { token, udid, rid });
                     const validateRes = await fetch(validateUrl, {
-                        headers: { 'x-internal-token': internalSecret },
+                        headers: { Authorization: internalSecret },
                         signal: AbortSignal.timeout(3000),
                     });
                     if (validateRes.ok) {

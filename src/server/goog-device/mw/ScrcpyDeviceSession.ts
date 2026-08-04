@@ -319,11 +319,11 @@ export class ScrcpyDeviceSession {
         const port = this.forwardedPort;
         console.log(TAG, `[attempt ${attempt}] ADB forward port=${port} for ${this.udid}`);
 
-        // Open 3 sequential TCP connections as required by scrcpy 3.x with control=true:
-        //   1. video  2. audio  3. control
         console.log(TAG, `[attempt ${attempt}] connecting video TCP for ${this.udid}...`);
         this.videoSocket = await this.connectTcp(port);
         console.log(TAG, `[attempt ${attempt}] video TCP connected for ${this.udid}`);
+        await this.readVideoDummyByte(this.videoSocket);
+
         console.log(TAG, `[attempt ${attempt}] connecting audio TCP for ${this.udid}...`);
         this.audioSocket = await this.connectTcp(port);
         console.log(TAG, `[attempt ${attempt}] audio TCP connected for ${this.udid}`);
@@ -341,13 +341,8 @@ export class ScrcpyDeviceSession {
             this.controlSocket = undefined;
         });
 
-        // Start audio piping in the background
         this.pipeAudio(this.audioSocket);
-
-        // Video init: read scrcpy handshake, cache initial message, then pipe frames.
-        // If the scrcpy server is in a bad state (e.g. encoder failed), this will
-        // timeout via readExact and throw, triggering a retry.
-        await this.initVideo(this.videoSocket, screenSize);
+        await this.initVideo(this.videoSocket, screenSize, true);
     }
 
     /**
@@ -617,14 +612,20 @@ export class ScrcpyDeviceSession {
 
     // ─── Video pipeline ───────────────────────────────────────────────────────
 
-    private async initVideo(
-        socket: net.Socket,
-        adbScreenSize: { width: number; height: number },
-    ): Promise<void> {
-        // 1. Discard 1-byte dummy (only sent on the video / first socket)
+    private async readVideoDummyByte(socket: net.Socket): Promise<void> {
         console.log(TAG, `initVideo: waiting for 1-byte dummy for ${this.udid}...`);
         await this.readExact(socket, 1);
         console.log(TAG, `initVideo: got dummy byte for ${this.udid}`);
+    }
+
+    private async initVideo(
+        socket: net.Socket,
+        adbScreenSize: { width: number; height: number },
+        dummyAlreadyRead = false,
+    ): Promise<void> {
+        if (!dummyAlreadyRead) {
+            await this.readVideoDummyByte(socket);
+        }
 
         // 2. Read device name (64 bytes, null-padded UTF-8)
         const nameBuf = await this.readExact(socket, DEVICE_NAME_FIELD_LENGTH);

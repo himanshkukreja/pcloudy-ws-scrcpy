@@ -1,10 +1,13 @@
 export const SERVER_PACKAGE = 'com.genymobile.scrcpy.Server';
 export const SERVER_VERSION = '3.3.3';
 export const SCRCPY_SOCKET_NAME = 'scrcpy_00000000';
+// Identifies servers started by this process. Other scrcpy instances on the
+// same device use their own scid, and must not be treated as ours.
+export const SERVER_SCID = '0';
 
 const ARGUMENTS = [
     SERVER_VERSION,
-    'scid=0',
+    `scid=${SERVER_SCID}`,
     'log_level=error',
     'audio=true',
     'audio_codec=opus',

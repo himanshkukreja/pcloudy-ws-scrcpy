@@ -2,7 +2,7 @@ import '../../../vendor/Genymobile/scrcpy/scrcpy-server.jar';
 import '../../../vendor/Genymobile/scrcpy/LICENSE';
 
 import { Device } from './Device';
-import { ARGS_STRING, SERVER_PACKAGE, SERVER_PROCESS_NAME, SERVER_VERSION } from '../../common/Constants';
+import { ARGS_STRING, SERVER_PACKAGE, SERVER_PROCESS_NAME, SERVER_SCID, SERVER_VERSION } from '../../common/Constants';
 import path from 'path';
 import PushTransfer from '@dead50f7/adbkit/lib/adb/sync/pushtransfer';
 
@@ -64,11 +64,27 @@ export class ScrcpyServer {
                 if (versionString === SERVER_VERSION) {
                     serverPid.push(pid);
                 } else {
-                    console.log(
-                        device.TAG,
-                        `Found different server version running (PID: ${pid}, Version: ${versionString}), killing it`,
-                    );
-                    device.killProcess(pid);
+                    // Only clear stale servers that we started ourselves, identified by
+                    // our scid. Other scrcpy instances on the device -- notably the rBox
+                    // session video recorder, which runs a different scrcpy build under
+                    // its own scid -- must be left running. Killing those silently ends
+                    // the session recording the moment a stream starts.
+                    const scidArg = args.find((arg) => arg.startsWith('scid='));
+                    const scid = scidArg ? scidArg.substring('scid='.length) : undefined;
+                    if (scid === SERVER_SCID) {
+                        console.log(
+                            device.TAG,
+                            `Found different server version running (PID: ${pid}, Version: ${versionString}), killing it`,
+                        );
+                        device.killProcess(pid);
+                    } else {
+                        console.log(
+                            device.TAG,
+                            `Leaving foreign scrcpy server running (PID: ${pid}, Version: ${versionString}, scid: ${
+                                scid ?? 'unknown'
+                            })`,
+                        );
+                    }
                 }
                 return;
             });

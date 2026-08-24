@@ -9,12 +9,19 @@ import PushTransfer from '@dead50f7/adbkit/lib/adb/sync/pushtransfer';
 const TEMP_PATH = '/data/local/tmp/';
 const FILE_DIR = path.join(__dirname, 'vendor/Genymobile/scrcpy');
 const FILE_NAME = 'scrcpy-server.jar';
-const RUN_COMMAND = `CLASSPATH=${TEMP_PATH}${FILE_NAME} nohup app_process ${ARGS_STRING}`;
+// Push under our own name. The stock scrcpy CLI hardcodes
+// /data/local/tmp/scrcpy-server.jar, and on pCloudy rBoxes it runs against the
+// same devices for session video recording. Sharing the path meant whichever
+// side pushed last won, and the other side's client then loaded a mismatched
+// server ("The server version (3.3.3) does not match the client (2.5)"),
+// intermittently killing the recording depending on timing.
+const REMOTE_FILE_NAME = 'ws-scrcpy-server.jar';
+const RUN_COMMAND = `CLASSPATH=${TEMP_PATH}${REMOTE_FILE_NAME} nohup app_process ${ARGS_STRING}`;
 
 export class ScrcpyServer {
     private static async copyServer(device: Device): Promise<PushTransfer> {
         const src = path.join(FILE_DIR, FILE_NAME);
-        const dst = TEMP_PATH + FILE_NAME; // don't use path.join(): will not work on win host
+        const dst = TEMP_PATH + REMOTE_FILE_NAME; // don't use path.join(): will not work on win host
         return device.push(src, dst);
     }
 

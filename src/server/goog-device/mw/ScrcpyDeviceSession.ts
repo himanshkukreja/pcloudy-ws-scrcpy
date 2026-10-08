@@ -786,20 +786,26 @@ export class ScrcpyDeviceSession {
                         this.cachedLastIDR = payload;
                     }
 
+                    const promoted: WS[] = [];
                     if (isKey && this.waitingForIdr.size > 0) {
                         // Live IDR arrived — send config + IDR + flush to waiting clients
                         // directly, then promote them after the broadcast below.
                         for (const ws of this.waitingForIdr) {
-                            if (ws.readyState === WS.OPEN) {
-                                if (this.cachedVideoConfigFrame) {
-                                    ws.send(this.cachedVideoConfigFrame);
-                                }
-                                ws.send(payload);
-                                // Flush: re-send config to push IDR out of NaluStreamBuffer
-                                if (this.cachedVideoConfigFrame) {
-                                    ws.send(this.cachedVideoConfigFrame);
-                                }
+                            if (ws.readyState !== WS.OPEN) continue;
+                            // A client parked because it fell behind may still be draining.
+                            // Piling an IDR on top of a full buffer only deepens the backlog;
+                            // leave it waiting and resync it on a later IDR once it caught up.
+                            if (ws.bufferedAmount > MAX_WS_BUFFERED) continue;
+
+                            if (this.cachedVideoConfigFrame) {
+                                ws.send(this.cachedVideoConfigFrame);
                             }
+                            ws.send(payload);
+                            // Flush: re-send config to push IDR out of NaluStreamBuffer
+                            if (this.cachedVideoConfigFrame) {
+                                ws.send(this.cachedVideoConfigFrame);
+                            }
+                            promoted.push(ws);
                         }
                     }
 
@@ -808,9 +814,12 @@ export class ScrcpyDeviceSession {
                     // loop above (avoids sending duplicate IDR).
                     this.broadcastToClients(payload, this.waitingForIdr.size > 0);
 
-                    // Now promote: from the next frame onward they receive everything.
-                    if (isKey && this.waitingForIdr.size > 0) {
-                        this.waitingForIdr.clear();
+                    // Promote only the clients actually served above. Clearing the whole set
+                    // would also promote clients that were closed or still draining, leaving
+                    // them to decode P-frames with no preceding IDR — a permanently broken
+                    // picture that no later frame can repair.
+                    for (const ws of promoted) {
+                        this.waitingForIdr.delete(ws);
                     }
                 }
             }
@@ -859,8 +868,28 @@ export class ScrcpyDeviceSession {
     private broadcastToClients(data: Buffer, skipWaiting = false): void {
         for (const ws of this.clients) {
             if (ws.readyState !== WS.OPEN) continue;
-            if (ws.bufferedAmount > MAX_WS_BUFFERED) continue;
             if (skipWaiting && this.waitingForIdr.has(ws)) continue;
+
+            if (ws.bufferedAmount > MAX_WS_BUFFERED) {
+                // The client has fallen behind. Simply skipping frames here never recovers:
+                // it keeps missing P-frames, so its decoder stays broken, while it is still
+                // rendering a backlog of up to MAX_WS_BUFFERED bytes. The picture gets
+                // progressively staler and the only thing that clears it is tearing the
+                // socket down — which is why restarting ws-scrcpy "fixes" a laggy stream.
+                //
+                // Park it instead: it receives nothing more until its buffer drains, then
+                // resyncs cleanly on the next IDR via the promotion path. That turns a
+                // permanent degradation into a brief hiccup.
+                if (!this.waitingForIdr.has(ws)) {
+                    console.log(
+                        TAG,
+                        `client fell behind for ${this.udid} (buffered: ${ws.bufferedAmount} bytes) — will resync on next IDR`,
+                    );
+                    this.waitingForIdr.add(ws);
+                }
+                continue;
+            }
+
             ws.send(data);
         }
     }
